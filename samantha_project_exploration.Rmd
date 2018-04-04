@@ -1,0 +1,97 @@
+---
+title: "Project Pieces: Data Exploration and Visualization"
+author: "Samantha Piatt"
+date: April 4, 2018
+output:
+  pdf_document:
+    fig_width: 5
+    fig_height: 4
+---
+```{r include = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(stringr)
+library(lubridate)
+library(devtools)
+library(glmnetUtils)
+library(ggplot2)
+library(reshape)
+library(cowplot)
+
+data <- na.omit(read.csv("mms_20151016.csv"))
+sitl <- read.csv("sitl_20151016.csv")
+
+# omit first X column some columns
+data <- data[,-1]
+
+# Rectifying date/times
+sitl$Start = str_replace_all(sitl$Start, "([T])", " ")
+sitl$End = str_replace_all(sitl$End, "([T])", " ")
+
+sitl$Start <- hour(sitl$Start)*3600 + minute(sitl$Start)*60 + second(sitl$Start)
+sitl$End <- hour(sitl$End)*3600 + minute(sitl$End)*60 + second(sitl$End)
+data$Time <- hour(data$Time)*3600 + minute(data$Time)*60 + second(data$Time)
+data[,"Priority"] <- 0
+data[,"Selected"] <- 0
+
+# populate Y in data
+for(i in 1:nrow(sitl)){
+  for(x in 1:nrow(data)){
+    if(data$Time[x] >= sitl$Start[i]){
+      if(data$Time[x] <= sitl$End[i]){
+        data$Priority[x] <- sitl$Priority[i]
+        data$Selected[x] <- 1
+      }
+    }
+  }
+}
+
+# split data
+train.size <- floor(0.75 * nrow(data))
+set.seed(0)
+train.select <- sample(seq_len(nrow(data)), size = train.size)
+train <- data[train.select, ]
+test <- data[-train.select, ]
+
+# order values by time
+train <- train[order(train$Time),]
+```
+```{r, fig.width = 12, fig.asp = 0.75, fig.align = "center"}
+DES <- melt(data.frame(train[, 1:6], Time = train$Time), id = 'Time')
+DIS <- melt(data.frame(train[, 7:12], Time = train$Time), id = 'Time')
+FGM <- melt(data.frame(train[, 13:16], Time = train$Time), id = 'Time')
+SEL <- data.frame(X = train$Time, Y = train$Selected)
+
+remove_axis <- theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.line.x = element_blank())
+remove_legend <- theme(legend.position='none')
+theme_set(theme_grey() + theme(legend.justification = "left", plot.margin = margin(0, 0, 0, 0)))
+
+pDES <- ggplot(DES, aes(x = Time, y = value, color = variable)) + geom_line() + remove_axis + 
+  ylab("DES") + guides(color = guide_legend(title = "DES")) + labs(title = "Features grouped by Sub Category, by Time")
+pDIS <- ggplot(DIS, aes(x = Time, y = value, color = variable)) + geom_line() + remove_axis + 
+  ylab("DIS") + guides(color = guide_legend(title = "DIS")) + theme(plot.title = element_blank())
+pFGM <- ggplot(FGM, aes(x = Time, y = value, color = variable)) + geom_line() + remove_axis + 
+  ylab("FGM") + guides(color = guide_legend(title = "FGM"))
+pSEL <- ggplot(SEL, aes(x = X, y = Y)) + geom_line() + xlab("Time in Seconds")+ scale_y_discrete(name = "Selected", limits = c(0, 1))
+
+lDES <- get_legend(pDES)
+lDIS <- get_legend(pDIS)
+lFGM <- get_legend(pFGM)
+
+plot_grid(
+  plot_grid(pDES + remove_legend, pDIS + remove_legend, pFGM + remove_legend, pSEL, align = "hv", ncol = 1, rel_heights = c(1, 1, 1, 0.4)),
+  plot_grid(lDES, lDIS, lFGM, NULL, ncol = 1, rel_heights = c(1, 1, 1, 0.4)),
+  rel_widths = c(5, 1)
+)
+```
+Looking at these plots, the DIS values don't seem to influence wether or not the SITL selected that time point. So we can likely leave it out, or it will get excluded in reduction automatically.
+
+Another note, DES_Temperature para & perp seems to have a little bit of a linear relationship.
+
+It also looks like FGM_Magnetic_Field y & z seem to have a relationship of sorts, but when we look at it more closely, it has some weird complex relationship with two 'hot' spots and a V shape.
+```{r, fig.width = 8, fig.asp = 0.5, fig.align = "center"}
+plot_grid(
+  ggplot(data.frame(Para = train[,2], Perp = train[,3]), aes(x = Para, y = Perp)) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "DES Temperature"),
+  ggplot(data.frame(Y = train[,15], Z = train[,16]), aes(x = Y, y = Z, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "FGM Magnetic Field")
+)
+```
