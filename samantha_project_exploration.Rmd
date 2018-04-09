@@ -4,8 +4,8 @@ author: "Samantha Piatt"
 date: April 4, 2018
 output:
   pdf_document:
-    fig_width: 5
-    fig_height: 4
+    fig_width: 6
+    #fig_asp: 0.75
 ---
 ```{r include = FALSE}
 knitr::opts_chunk$set(echo = FALSE)
@@ -25,10 +25,10 @@ test_2 <- split_test(data_2)
 library(ggplot2)
 library(splines)
 
-DES <- reshape::melt(data.frame(train[, 1:6], Time = train$Time), id = 'Time')
-DIS <- reshape::melt(data.frame(train[, 7:12], Time = train$Time), id = 'Time')
-FGM <- reshape::melt(data.frame(train[, 13:16], Time = train$Time), id = 'Time')
-SEL <- data.frame(X = train$Time, Y = train$Selected)
+DES <- reshape::melt(data.frame(train_1[, 1:6], Time = train_1$Time), id = 'Time')
+DIS <- reshape::melt(data.frame(train_1[, 7:12], Time = train_1$Time), id = 'Time')
+FGM <- reshape::melt(data.frame(train_1[, 13:16], Time = train_1$Time), id = 'Time')
+SEL <- data.frame(X = train_1$Time, Y = train_1$Selected)
 
 remove_axis <- theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.line.x = element_blank())
 remove_legend <- theme(legend.position='none')
@@ -63,15 +63,15 @@ DES Density and FGM Mag. Field para/perp have a relationship that looks similar 
 
 ```{r, fig.width = 8, fig.asp = 1.5, fig.align = "center"}
 cowplot::plot_grid(
-  ggplot(data.frame(Para = train[,2], Perp = train[,3]), aes(x = Para, y = Perp)) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "DES Temperature"),
-  ggplot(data.frame(Y = train[,15], Z = train[,16]), aes(x = Y, y = Z, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "FGM Magnetic Field"),
-  ggplot(data.frame(Density = train[,1], Velocity = train[,4]), aes(y = Density, x = Velocity)) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
+  ggplot(data.frame(Para = train_1[,2], Perp = train_1[,3]), aes(x = Para, y = Perp)) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "DES Temperature"),
+  ggplot(data.frame(Y = train_1[,15], Z = train_1[,16]), aes(x = Y, y = Z, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "FGM Magnetic Field"),
+  ggplot(data.frame(Density = train_1[,1], Velocity = train_1[,4]), aes(y = Density, x = Velocity)) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "DES Density & Velocity X"),
-  ggplot(data.frame(Density = train[,1], Perp = train[,3]), aes(y = Density, x = Perp, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
+  ggplot(data.frame(Density = train_1[,1], Perp = train_1[,3]), aes(y = Density, x = Perp, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "DES Density and FGM Magnetic Field"),
-  ggplot(data.frame(Density = train[,1], Perp = ( 1 / train[,3] )), aes(y = Density, x = Perp, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
+  ggplot(data.frame(Density = train_1[,1], Perp = ( 1 / train_1[,3] )), aes(y = Density, x = Perp, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "DES Density and FGM Magnetic Field") + xlab("1 / Perp"),
-  ggplot(data.frame(w = train[,13], z = train[,16]), aes(y = w, x = z, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
+  ggplot(data.frame(w = train_1[,13], z = train_1[,16]), aes(y = w, x = z, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "FGM Magnetic Field"),
   ncol = 2
 )
@@ -96,15 +96,16 @@ series <- function(x) {
   out
 }
 
-log <- glm(Selected ~ . , data = train[,c(1:6, 13:15, 18:19)], family = binomial)
+log <- glm(Selected ~ . , data = train_1[,c(1:6, 13:15, 18:19)], family = binomial)
 plot(log)
 
-timeseries <- glm(Selected ~ ., data = data.frame(train[4:(dim(train)[1] - 3), 18:19], series(train[,c(1:6, 13:15)])), family = binomial)
+timeseries <- glm(Selected ~ ., data = data.frame(train_1[4:(dim(train_1)[1] - 3), 18:19], series(train_1[,c(1:6, 13:15)])), family = binomial)
 plot(timeseries)
 ```
 This doesn't seem to make a difference if we do a 7 frame window (surrounding the data point) on all variables (I also tried a smaller window of 5 frames).
 
 ## Combination Exploration
 ```{r}
-comb <- glm(Selected ~ . , data = train)
+comb <- glm(Selected ~ . , data = train_1)
 ```
+
