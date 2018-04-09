@@ -8,48 +8,7 @@ output:
     fig_height: 4
 ---
 ```{r include = FALSE}
-knitr::opts_chunk$set(echo = FALSE)
-
-#library(stringr)
-#library(lubridate)
-
-data <- na.omit(read.csv("mms_20151016.csv"))
-sitl <- read.csv("sitl_20151016.csv")
-
-# omit first X column
-data <- data[,-1]
-
-# Rectifying date/times
-sitl$Start = stringr::str_replace_all(sitl$Start, "([T])", " ")
-sitl$End = stringr::str_replace_all(sitl$End, "([T])", " ")
-
-sitl$Start <- lubridate::hour(sitl$Start)*3600 + lubridate::minute(sitl$Start)*60 + lubridate::second(sitl$Start)
-sitl$End <- lubridate::hour(sitl$End)*3600 + lubridate::minute(sitl$End)*60 + lubridate::second(sitl$End)
-data$Time <- lubridate::hour(data$Time)*3600 + lubridate::minute(data$Time)*60 + lubridate::second(data$Time)
-data[,"Priority"] <- 0
-data[,"Selected"] <- 0
-
-# populate Y in data
-for(i in 1:nrow(sitl)){
-  for(x in 1:nrow(data)){
-    if(data$Time[x] >= sitl$Start[i]){
-      if(data$Time[x] <= sitl$End[i]){
-        data$Priority[x] <- sitl$Priority[i]
-        data$Selected[x] <- 1
-      }
-    }
-  }
-}
-
-# split data
-train.size <- floor(0.75 * nrow(data))
-set.seed(0)
-train.select <- sample(seq_len(nrow(data)), size = train.size)
-train <- data[train.select, ]
-test <- data[-train.select, ]
-
-# order values by time
-train <- train[order(train$Time),]
+source("GetData.R")
 ```
 
 # Data Exploration and Visualization
@@ -66,11 +25,11 @@ remove_axis <- theme(axis.title.x=element_blank(), axis.text.x=element_blank(), 
 remove_legend <- theme(legend.position='none')
 theme_set(theme_grey() + theme(legend.justification = "left", plot.margin = margin(0, 0, 0, 0)))
 
-spDES <- ggplot(DES, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 36), se = FALSE) + remove_axis + 
+spDES <- ggplot(DES, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 36), se = FALSE) + remove_axis +
   ylab("DES") + guides(color = guide_legend(title = "DES")) + labs(title = "Features Grouped by Instrument and Time")
-spDIS <- ggplot(DIS, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 36), se = FALSE) + remove_axis + 
+spDIS <- ggplot(DIS, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 36), se = FALSE) + remove_axis +
   ylab("DIS") + guides(color = guide_legend(title = "DIS")) + theme(plot.title = element_blank())
-spFGM <- ggplot(FGM, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 36), se = FALSE) + remove_axis + 
+spFGM <- ggplot(FGM, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 36), se = FALSE) + remove_axis +
   ylab("FGM") + guides(color = guide_legend(title = "FGM"))
 pSEL <- ggplot(SEL, aes(x = X, y = Y)) + geom_line() + xlab("Time in Seconds")+ scale_y_discrete(name = "Selected", limits = c(0, 1))
 
@@ -96,13 +55,13 @@ DES Density and FGM Mag. Field para/perp have a relationship that looks similar 
 cowplot::plot_grid(
   ggplot(data.frame(Para = train[,2], Perp = train[,3]), aes(x = Para, y = Perp)) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "DES Temperature"),
   ggplot(data.frame(Y = train[,15], Z = train[,16]), aes(x = Y, y = Z, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "FGM Magnetic Field"),
-  ggplot(data.frame(Density = train[,1], Velocity = train[,4]), aes(y = Density, x = Velocity)) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + 
+  ggplot(data.frame(Density = train[,1], Velocity = train[,4]), aes(y = Density, x = Velocity)) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "DES Density & Velocity X"),
-  ggplot(data.frame(Density = train[,1], Perp = train[,3]), aes(y = Density, x = Perp, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + 
+  ggplot(data.frame(Density = train[,1], Perp = train[,3]), aes(y = Density, x = Perp, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "DES Density and FGM Magnetic Field"),
-  ggplot(data.frame(Density = train[,1], Perp = ( 1 / train[,3] )), aes(y = Density, x = Perp, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + 
+  ggplot(data.frame(Density = train[,1], Perp = ( 1 / train[,3] )), aes(y = Density, x = Perp, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "DES Density and FGM Magnetic Field") + xlab("1 / Perp"),
-  ggplot(data.frame(w = train[,13], z = train[,16]), aes(y = w, x = z, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + 
+  ggplot(data.frame(w = train[,13], z = train[,16]), aes(y = w, x = z, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "FGM Magnetic Field"),
   ncol = 2
 )
