@@ -10,13 +10,8 @@ output:
 ```{r include = FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 
-library(stringr)
-library(lubridate)
-library(devtools)
-library(glmnetUtils)
-library(ggplot2)
-library(reshape)
-library(cowplot)
+#library(stringr)
+#library(lubridate)
 
 data <- na.omit(read.csv("mms_20151016.csv"))
 sitl <- read.csv("sitl_20151016.csv")
@@ -25,12 +20,12 @@ sitl <- read.csv("sitl_20151016.csv")
 data <- data[,-1]
 
 # Rectifying date/times
-sitl$Start = str_replace_all(sitl$Start, "([T])", " ")
-sitl$End = str_replace_all(sitl$End, "([T])", " ")
+sitl$Start = stringr::str_replace_all(sitl$Start, "([T])", " ")
+sitl$End = stringr::str_replace_all(sitl$End, "([T])", " ")
 
-sitl$Start <- hour(sitl$Start)*3600 + minute(sitl$Start)*60 + second(sitl$Start)
-sitl$End <- hour(sitl$End)*3600 + minute(sitl$End)*60 + second(sitl$End)
-data$Time <- hour(data$Time)*3600 + minute(data$Time)*60 + second(data$Time)
+sitl$Start <- lubridate::hour(sitl$Start)*3600 + lubridate::minute(sitl$Start)*60 + lubridate::second(sitl$Start)
+sitl$End <- lubridate::hour(sitl$End)*3600 + lubridate::minute(sitl$End)*60 + lubridate::second(sitl$End)
+data$Time <- lubridate::hour(data$Time)*3600 + lubridate::minute(data$Time)*60 + lubridate::second(data$Time)
 data[,"Priority"] <- 0
 data[,"Selected"] <- 0
 
@@ -56,42 +51,102 @@ test <- data[-train.select, ]
 # order values by time
 train <- train[order(train$Time),]
 ```
+
+# Data Exploration and Visualization
 ```{r, fig.width = 12, fig.asp = 0.75, fig.align = "center"}
-DES <- melt(data.frame(train[, 1:6], Time = train$Time), id = 'Time')
-DIS <- melt(data.frame(train[, 7:12], Time = train$Time), id = 'Time')
-FGM <- melt(data.frame(train[, 13:16], Time = train$Time), id = 'Time')
+library(ggplot2)
+library(splines)
+#library(reshape)
+#library(cowplot)
+
+DES <- reshape::melt(data.frame(train[, 1:6], Time = train$Time), id = 'Time')
+DIS <- reshape::melt(data.frame(train[, 7:12], Time = train$Time), id = 'Time')
+FGM <- reshape::melt(data.frame(train[, 13:16], Time = train$Time), id = 'Time')
 SEL <- data.frame(X = train$Time, Y = train$Selected)
 
 remove_axis <- theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.line.x = element_blank())
 remove_legend <- theme(legend.position='none')
 theme_set(theme_grey() + theme(legend.justification = "left", plot.margin = margin(0, 0, 0, 0)))
 
-pDES <- ggplot(DES, aes(x = Time, y = value, color = variable)) + geom_line() + remove_axis + 
-  ylab("DES") + guides(color = guide_legend(title = "DES")) + labs(title = "Features grouped by Sub Category, by Time")
-pDIS <- ggplot(DIS, aes(x = Time, y = value, color = variable)) + geom_line() + remove_axis + 
+spDES <- ggplot(DES, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 36), se = FALSE) + remove_axis + 
+  ylab("DES") + guides(color = guide_legend(title = "DES")) + labs(title = "Features Grouped by Instrument and Time")
+spDIS <- ggplot(DIS, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 36), se = FALSE) + remove_axis + 
   ylab("DIS") + guides(color = guide_legend(title = "DIS")) + theme(plot.title = element_blank())
-pFGM <- ggplot(FGM, aes(x = Time, y = value, color = variable)) + geom_line() + remove_axis + 
+spFGM <- ggplot(FGM, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 36), se = FALSE) + remove_axis + 
   ylab("FGM") + guides(color = guide_legend(title = "FGM"))
 pSEL <- ggplot(SEL, aes(x = X, y = Y)) + geom_line() + xlab("Time in Seconds")+ scale_y_discrete(name = "Selected", limits = c(0, 1))
 
-lDES <- get_legend(pDES)
-lDIS <- get_legend(pDIS)
-lFGM <- get_legend(pFGM)
+lDES <- cowplot::get_legend(spDES)
+lDIS <- cowplot::get_legend(spDIS)
+lFGM <- cowplot::get_legend(spFGM)
 
-plot_grid(
-  plot_grid(pDES + remove_legend, pDIS + remove_legend, pFGM + remove_legend, pSEL, align = "hv", ncol = 1, rel_heights = c(1, 1, 1, 0.4)),
-  plot_grid(lDES, lDIS, lFGM, NULL, ncol = 1, rel_heights = c(1, 1, 1, 0.4)),
+cowplot::plot_grid(
+  cowplot::plot_grid(spDES + remove_legend, spDIS + remove_legend, spFGM + remove_legend, pSEL, align = "hv", ncol = 1, rel_heights = c(1, 1, 1, 0.4)),
+  cowplot::plot_grid(lDES, lDIS, lFGM, NULL, ncol = 1, rel_heights = c(1, 1, 1, 0.4)),
   rel_widths = c(5, 1)
 )
 ```
-Looking at these plots, the DIS values don't seem to influence wether or not the SITL selected that time point. So we can likely leave it out, or it will get excluded in reduction automatically.
 
-Another note, DES_Temperature para & perp seems to have a little bit of a linear relationship.
+Looking at these plots, the DIS values don't seem to influence whether or not the SITL selected that time point. So we can likely leave it out, or it will get excluded in reduction automatically.
 
-It also looks like FGM_Magnetic_Field y & z seem to have a relationship of sorts, but when we look at it more closely, it has some weird complex relationship with two 'hot' spots and a V shape.
-```{r, fig.width = 8, fig.asp = 0.5, fig.align = "center"}
-plot_grid(
+Another note, DES_Temperature para & perp seems to have a linear relationship.
+
+It also looks like FGM_Magnetic_Field positional variables (like x, y, z) seem to have a relationship of sorts, which makes sense, but the relationship is not clear (to me).
+
+DES Density and FGM Mag. Field para/perp have a relationship that looks similar to 1/x..
+```{r, fig.width = 8, fig.asp = 1.5, fig.align = "center"}
+cowplot::plot_grid(
   ggplot(data.frame(Para = train[,2], Perp = train[,3]), aes(x = Para, y = Perp)) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "DES Temperature"),
-  ggplot(data.frame(Y = train[,15], Z = train[,16]), aes(x = Y, y = Z, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "FGM Magnetic Field")
+  ggplot(data.frame(Y = train[,15], Z = train[,16]), aes(x = Y, y = Z, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "FGM Magnetic Field"),
+  ggplot(data.frame(Density = train[,1], Velocity = train[,4]), aes(y = Density, x = Velocity)) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + 
+    labs(title = "DES Density & Velocity X"),
+  ggplot(data.frame(Density = train[,1], Perp = train[,3]), aes(y = Density, x = Perp, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + 
+    labs(title = "DES Density and FGM Magnetic Field"),
+  ggplot(data.frame(Density = train[,1], Perp = ( 1 / train[,3] )), aes(y = Density, x = Perp, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + 
+    labs(title = "DES Density and FGM Magnetic Field") + xlab("1 / Perp"),
+  ggplot(data.frame(w = train[,13], z = train[,16]), aes(y = w, x = z, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + 
+    labs(title = "FGM Magnetic Field"),
+  ncol = 2
 )
+```
+
+
+
+**Time Series Exploration**
+```{r}
+series <- function(x) {
+  scols <- function(x, pre) {
+    n <- length(x)[1]
+    tmp <- data.frame(x[5:(n-0)], x[4:(n-1)], x[3:(n-2)], x[2:(n-3)], x[1:(n-4)])
+    colnames(tmp) <- c(paste(pre, "_1"), paste(pre, "_2"), paste(pre, "_3"), paste(pre, "_4"), paste(pre, "_5"))
+    tmp
+  }
+  names <- colnames(x)
+  out <- data.frame(scols(x[, 1], names[1]))
+  for(i in length(x) -1){
+    tmp <- scols(x[, i + 1], names[i + 1])
+    out <- data.frame(out, tmp)
+  }
+  out
+}
+```
+```{r}
+linear <- ggplot(data.frame(Selected = data$Selected[3:(length(data[,1])-2)], Time = data$Time[3:(length(data[,1])-2)], series(data[,1:6])), aes(x = Time, y = Selected)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ . , se = FALSE)
+linear
+```
+
+```{r}
+library(MASS)
+log <- glm(Selected ~ . , data = train[,c(1:6,13:19)], family = binomial)
+probs <- predict(log, test[,c(1:6,13:19)], type = "response")
+#qda <- qda(Selected ~ ., data = train[,c(1:6,13:19)])
+#pred <- predict(qda, test[,c(1:6,13:19)])
+#ggplot(data.frame)
+#summary(model.log)
+#summary(model.probs)
+#ggplot(melt(data.frame(Selected = test[,19], Prediction = pred$class, Time = test$Time), id = 'Time'), aes(x = Time, y = value, color = variable)) + 
+#  geom_smooth(method = "lm", formula = y ~ ns(x, df = 36), se = FALSE)
+plot(log)
 ```
