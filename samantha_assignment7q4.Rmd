@@ -1,0 +1,46 @@
+---
+title: "Assignment 7, Problem 4: Bagging, Boosting, Random Forest"
+author: "Samantha Piatt"
+date: April 11, 2018
+output:
+  pdf_document:
+    fig_width: 3
+---
+```{r}
+source("GetDataFunctions.R")
+pdata <- merge_sitl("mms_20151016.csv", "sitl_20151016.csv")
+FGM_Subset <- pdata[, c(19, 13:16)]
+FGM_Subset$SelectedF <- as.factor(FGM_Subset$Selected)
+ptrain <- split_train(FGM_Subset)
+ptest <- split_test(FGM_Subset)
+
+# Dear pals,
+# This was a real pain. randomForest has to use factors. BUT the BOOOSTING package MUST use numeric values. So you need to have two columns. One as a factor, and ones as numeric. And then must exclude the one you don't need in your predictive function.
+# And so, this is how it must be. And I am sorry.
+```
+```{r}
+class_error <- function(probs, tvalue){
+  return(mean(probs != tvalue))
+}
+```
+```{r}
+pnum = 4
+bag.fit <- randomForest::randomForest(SelectedF ~ . - Selected, data = ptrain, mtry = pnum, importance = TRUE)
+bag.pred <- predict(bag.fit, newdata = ptest)
+errors.c.bag <- class_error(bag.pred, ptest$SelectedF)
+```
+```{r}
+rf.fit <- randomForest::randomForest(SelectedF ~ . - Selected, data = ptrain, mtry = sqrt(pnum), importance = TRUE)
+rf.pred <- predict(rf.fit, newdata = ptest)
+errors.c.rf <- class_error(rf.pred, ptest$SelectedF)
+```
+```{r}
+boost.fit <- gbm::gbm(Selected ~ . - SelectedF, data = ptrain, distribution = "bernoulli", n.trees = 5000, interaction.depth = 4)
+
+boost.pred <- predict(boost.fit, newdata = ptest, n.trees = 5000)
+boost.pred <- ifelse(boost.pred > 0.5, 1, 0)
+errors.c.boost <- class_error(boost.pred, ptest$Selected)
+```
+```{r}
+data.frame(Bag_CE = errors.c.bag, Boost_CE = errors.c.boost, RF_CE = errors.c.rf)
+```
