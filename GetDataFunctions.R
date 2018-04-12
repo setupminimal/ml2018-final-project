@@ -62,8 +62,7 @@ evaluation_merge <- function(mms_filename, sitl_filename){
   sitl.id <- sitl %>% select(c(Start,End,Priority)) %>%
     dplyr::mutate(Start = convert.time(Start), End = convert.time(End))
 
-  joined <- interval_inner_join(sitl.id, mms.id, c("Start","End"))
-    %>% group_by(X1) %>%
+  joined <- interval_inner_join(sitl.id, mms.id, c("Start","End")) %>% group_by(X1) %>%
 
   mms.target <- mms
   mms.target$Selected <- F
