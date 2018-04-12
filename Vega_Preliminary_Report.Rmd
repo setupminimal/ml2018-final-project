@@ -1,0 +1,22 @@
+---
+title: "CS 780 MMs Class Project"
+author: "Vega Group: Daroc Alden, Jeremy Walker, Samantha Piatt"
+date: April 12, 2018
+output: pdf_document
+---
+```{r page_options, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, fig.asp = 0.88, fig.width = 4)
+```
+# Motivation
+
+# Related work
+(papers describing machine learning methods or their applications)
+
+# Evaluation criteria
+
+# Methods
+
+# Recommendations
+best method with an estimate of prediction quality
+
+# Analysis
