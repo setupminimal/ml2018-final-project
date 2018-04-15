@@ -1,44 +1,53 @@
 ---
-title: "Project Pieces: Data Exploration and Visualization"
+title: "MMS Project Pieces: Data Exploration and Visualization"
 author: "Samantha Piatt"
 date: April 4, 2018
-output:
-  pdf_document:
-    fig_width: 6
-    #fig_asp: 0.75
+output: pdf_document
 ---
-```{r include = FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+```{r page_options, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, fig.asp = 0.88, fig.width = 4)
+
+library(MASS)
+library(ggplot2)
+library(splines)
+library(magrittr)
+
 source("GetDataFunctions.R")
+source("ExperimentalFunctions.R")
+```
+```{r}
+#data <- rbind(merge_sitl("mms_20151016.csv", "sitl_20151016.csv"), merge_sitl("mms_20151204.csv", "sitl_20151204.csv"))
+data <- merge_sitl("mms_20151016.csv", "sitl_20151016.csv")
+data$SelectedF <- as.factor(data$Selected)
+train <- split_train(data)
+test <- split_test(data)
 
-data_1 <- merge_sitl("mms_20151016.csv", "sitl_20151016.csv")
-train_1 <- split_train(data_1)
-test_1 <- split_test(data_1)
-
-data_2 <- merge_sitl("mms_20151204.csv", "sitl_20151204.csv")
-train_2 <- split_train(data_2)
-test_2 <- split_test(data_2)
+DES_set <- c("DES_Density", "DES_Temperature_para", "DES_Temperature_perp", "DES_Velocity_x", 
+             "DES_Velocity_y", "DES_Velocity_z")
+DIS_set <- c("DIS_Density", "DIS_Temperature_para", "DIS_Temperature_perp", "DIS_Velocity_x",
+             "DIS_Velocity_y", "DIS_Velocity_z")
+FGM_set <- c("FGM_Magnetic_Field_w", "FGM_Magnetic_Field_x", "FGM_Magnetic_Field_y",
+             "FGM_Magnetic_Field_z")
+SEL_set <- c("Time", "Selected")
+featureSubset <- c(DES_set, DIS_set, FGM_set)
 ```
 
 # Data Exploration and Visualization
 ```{r, fig.width = 12, fig.asp = 0.75, fig.align = "center"}
-library(ggplot2)
-library(splines)
-
-DES <- reshape::melt(data.frame(train_1[, 1:6], Time = train_1$Time), id = 'Time')
-DIS <- reshape::melt(data.frame(train_1[, 7:12], Time = train_1$Time), id = 'Time')
-FGM <- reshape::melt(data.frame(train_1[, 13:16], Time = train_1$Time), id = 'Time')
-SEL <- data.frame(X = train_1$Time, Y = train_1$Selected)
+DES <- reshape::melt(data.frame(data[, DES_set], Time = data$Time), id = 'Time')
+DIS <- reshape::melt(data.frame(data[, DIS_set], Time = data$Time), id = 'Time')
+FGM <- reshape::melt(data.frame(data[, FGM_set], Time = data$Time), id = 'Time')
+SEL <- data.frame(X = data$Time, Y = data$Selected)
 
 remove_axis <- theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.line.x = element_blank())
 remove_legend <- theme(legend.position='none')
 theme_set(theme_grey() + theme(legend.justification = "left", plot.margin = margin(0, 0, 0, 0)))
 
-spDES <- ggplot(DES, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 36), se = FALSE) + remove_axis +
+spDES <- ggplot(DES, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 100), se = FALSE) + remove_axis +
   ylab("DES") + guides(color = guide_legend(title = "DES")) + labs(title = "Features Grouped by Instrument and Time")
-spDIS <- ggplot(DIS, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 36), se = FALSE) + remove_axis +
+spDIS <- ggplot(DIS, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 100), se = FALSE) + remove_axis +
   ylab("DIS") + guides(color = guide_legend(title = "DIS")) + theme(plot.title = element_blank())
-spFGM <- ggplot(FGM, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 36), se = FALSE) + remove_axis +
+spFGM <- ggplot(FGM, aes(x = Time, y = value, color = variable)) + geom_smooth(method = "lm", formula = y ~ ns(x, df = 100), se = FALSE) + remove_axis +
   ylab("FGM") + guides(color = guide_legend(title = "FGM"))
 pSEL <- ggplot(SEL, aes(x = X, y = Y)) + geom_line() + xlab("Time in Seconds")+ scale_y_discrete(name = "Selected", limits = c(0, 1))
 
@@ -63,15 +72,21 @@ DES Density and FGM Mag. Field para/perp have a relationship that looks similar 
 
 ```{r, fig.width = 8, fig.asp = 1.5, fig.align = "center"}
 cowplot::plot_grid(
-  ggplot(data.frame(Para = train_1[,2], Perp = train_1[,3]), aes(x = Para, y = Perp)) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "DES Temperature"),
-  ggplot(data.frame(Y = train_1[,15], Z = train_1[,16]), aes(x = Y, y = Z, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "FGM Magnetic Field"),
-  ggplot(data.frame(Density = train_1[,1], Velocity = train_1[,4]), aes(y = Density, x = Velocity)) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
+  ggplot(data.frame(Para = train$DES_Temperature_para, Perp = train$DES_Temperature_perp), aes(x = Para, y = Perp)) + 
+    geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "DES Temperature"),
+  ggplot(data.frame(Y = train$FGM_Magnetic_Field_y, Z = train$FGM_Magnetic_Field_z), aes(x = Y, y = Z, color = "#8f8699")) + 
+    geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "FGM Magnetic Field"),
+  ggplot(data.frame(Density = train$DES_Density, Velocity = train$DES_Velocity_x), aes(y = Density, x = Velocity)) + 
+    geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "DES Density & Velocity X"),
-  ggplot(data.frame(Density = train_1[,1], Perp = train_1[,3]), aes(y = Density, x = Perp, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
+  ggplot(data.frame(Density = train$DES_Density, Perp = train$DES_Temperature_perp), aes(y = Density, x = Perp, color = "#8f8699")) + 
+    geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "DES Density and FGM Magnetic Field"),
-  ggplot(data.frame(Density = train_1[,1], Perp = ( 1 / train_1[,3] )), aes(y = Density, x = Perp, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
+  ggplot(data.frame(Density = train$DES_Density, Perp = ( 1 / train$DES_Temperature_perp )), aes(y = Density, x = Perp, color = "#8f8699")) + 
+    geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "DES Density and FGM Magnetic Field") + xlab("1 / Perp"),
-  ggplot(data.frame(w = train_1[,13], z = train_1[,16]), aes(y = w, x = z, color = "#8f8699")) + geom_point(colour = "#591d91", shape = 1) + theme_grey() +
+  ggplot(data.frame(w = train$FGM_Magnetic_Field_w, z = train$FGM_Magnetic_Field_z), aes(y = w, x = z, color = "#8f8699")) + 
+    geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "FGM Magnetic Field"),
   ncol = 2
 )
@@ -79,33 +94,27 @@ cowplot::plot_grid(
 
 ## Time Series Exploration
 ```{r}
-library(MASS)
-series <- function(x) {
-  scols <- function(x, pre) {
-    n <- length(x)[1]
-    tmp <- data.frame(x[7:(n-0)], x[6:(n-1)], x[5:(n-2)], x[4:(n-3)], x[3:(n-4)], x[2:(n-5)], x[1:(n-6)])
-    colnames(tmp) <- c(paste(pre, "1"), paste(pre, "2"), paste(pre, "3"), paste(pre, "4"), paste(pre, "5"), paste(pre, "6"), paste(pre, "7"))
-    tmp
-  }
-  names <- colnames(x)
-  out <- data.frame(scols(x[, 1], names[1]))
-  for(i in length(x) -1){
-    tmp <- scols(x[, i + 1], names[i + 1])
-    out <- data.frame(out, tmp)
-  }
-  out
-}
-
-log <- glm(Selected ~ . , data = train_1[,c(1:6, 13:15, 18:19)], family = binomial)
-plot(log)
-
-timeseries <- glm(Selected ~ ., data = data.frame(train_1[4:(dim(train_1)[1] - 3), 18:19], series(train_1[,c(1:6, 13:15)])), family = binomial)
-plot(timeseries)
+glm.fit <- glmnetUtils::cv.glmnet(Selected ~ . - Time - Priority - SelectedF, data = train, family = "binomial")
+log.odds <- predict(glm.fit, data)
+probabilities <- exp(log.odds) / (1 + exp(log.odds))
+f = "basic.csv"
+save_predictions(probabilities, data$X, f)
+evaluate(data, f)
 ```
-This doesn't seem to make a difference if we do a 7 frame window (surrounding the data point) on all variables (I also tried a smaller window of 5 frames).
+```{r}
+diffData <- data.frame(X = data$X, series_metric(data[,featureSubset], 20), data[, SEL_set])
+diffTrain <- split_train(diffData)
+
+glm.fit <- glmnetUtils::cv.glmnet(Selected ~ . - Time, data = diffTrain, family = "binomial")
+log.odds <- predict(glm.fit, diffData)
+probabilities <- exp(log.odds) / (1 + exp(log.odds))
+f = "time.series.metric.csv"
+save_predictions(probabilities, diffData$X, f)
+evaluate(data, f)
+```
 
 ## Combination Exploration
 ```{r}
-comb <- glm(Selected ~ . , data = train_1)
+#comb <- glm(Selected ~ . , data = train)
 ```
 

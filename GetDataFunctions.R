@@ -15,8 +15,10 @@ merge_sitl <- function(ina, inb) {
   outdata <- na.omit(read.csv(ina))
   sitl <- read.csv(inb)
 
-  # omit first X column
-  outdata <- outdata[,-1]
+  # Make index proper (might start at 0) but don't refer to index by name 
+  # since the eval says the index column is X1 and I've seen the index column 
+  # name as X. Regardless of the name, it should be the first column in dataset.
+  outdata[,1] <- outdata[,1] + 1
 
   # Rectifying date/times
   min.time <- min(lubridate::as_datetime(outdata$Time))
@@ -73,12 +75,44 @@ evaluation_merge <- function(mms_filename, sitl_filename){
   return(mms.target)
 }
 
-# Save data.
-#   DOES NOT YET WORK. This is from the evaluation document.
-#   Needs better input, etc.
-save_for_eval <- function(mitl_filename){
-  output <- data_frame(ObservationId=mms$X1,Selected=c(probabilities))
-  write_csv(output, mitl_filename)
+# Open a saved Evaluation file
+#   File should be saved using below save_predictions function (or equivalent).
+#   Input mms.target should be a data frame containing an 'X' column ofindex values and a 'Selected' 
+#   column of sitl values.
+#
+# Outputs performance data.
+evaluate <- function(mms.target, file) {
+  predictions <- read.csv(file)
+  
+  #sort them by prediction weight
+  predictions <- predictions[order(predictions$Selected, decreasing = TRUE),]
+  
+  # use MITL to select data points
+  true.predictions.count <- sum(mms.target$Selected == T)
+  predictions$MITL_Selected <- F
+  predictions$MITL_Selected[1:true.predictions.count] <- T
+  
+  # select the predictions
+  predictions_comparison <- inner_join(predictions %>% select(-Selected),
+                                       mms.target, by=c("ObservationId" = "X"))
+  
+  # computed metrics
+  found <- predictions_comparison %>% filter(Selected == T & MITL_Selected == T)
+  missed <- predictions_comparison %>% filter(Selected == T & MITL_Selected == F)
+  
+  cat("Total SITL points: ", true.predictions.count, "\n")
+  cat("Found SITL points: ", nrow(found), "\n")
+  cat("Missed SITL points: ", nrow(missed), "\n")
+  cat("Classification error: ", with(predictions_comparison,{mean(MITL_Selected != Selected)}), "\n")
+  cat("ERROR: ", sum(missed$Priority^2) / true.predictions.count, "\n")
+}
+
+# Saves prediction values for evaluation.
+#
+# Outputs a file containing the index and prediction value.
+save_predictions <- function(pred, ID, file){
+  output <- data.frame(ObservationId = ID, Selected = c(pred))
+  write.csv(output, file)
 }
 
 # ------------------------------------------------------------------- Split Data
