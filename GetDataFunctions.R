@@ -81,9 +81,32 @@ evaluation_merge <- function(mms_filename, sitl_filename){
 #   column of sitl values.
 #
 # Outputs performance data.
-evaluate <- function(mms.target, file) {
+evaluate_file <- function(data, file) {
   predictions <- read.csv(file)
-  
+  evaluation(data, predictions)
+}
+
+# Saves prediction values for evaluation.
+#
+# Outputs a file containing the index and prediction value.
+save_predictions <- function(pred, ID, file){
+  output <- data.frame(ObservationId = ID, Selected = c(pred))
+  write.csv(output, file)
+}
+
+# This cirucumvents saving to a file, and can be used with test data.
+#
+# Outputs performance data.
+evaluate_data <- function(data, prediction){
+  predictions <- data.frame(ObservationId = data$X, Selected = c(prediction))
+  evaluation(data, predictions)
+}
+
+# Evaluates target and predictions. To be used with evaluate_file or evaluate_data
+#
+# Outputs performance data.
+evaluation <- function(mms.target, predictions){
+  library(dplyr)
   #sort them by prediction weight
   predictions <- predictions[order(predictions$Selected, decreasing = TRUE),]
   
@@ -107,29 +130,21 @@ evaluate <- function(mms.target, file) {
   cat("ERROR: ", sum(missed$Priority^2) / true.predictions.count, "\n")
 }
 
-# Saves prediction values for evaluation.
-#
-# Outputs a file containing the index and prediction value.
-save_predictions <- function(pred, ID, file){
-  output <- data.frame(ObservationId = ID, Selected = c(pred))
-  write.csv(output, file)
-}
-
 # ------------------------------------------------------------------- Split Data
 # Calculate indexes for training subset.
 #
 # Returns a vector of row numbers to include in the training subset.
-select_train <- function(indata) {
+select_train <- function(indata, seed) {
   select = floor(0.75 * nrow(indata))
-  set.seed(0)
+  set.seed(seed)
   return(sample(seq_len(nrow(indata)), size = select))
 }
 
 # Split data set into training data.
 #
 # Returns a data frame containing the training subset of indata.
-split_train <- function(indata){
-  points = select_train(indata)
+split_train <- function(indata, seed = 0){
+  points = select_train(indata, seed)
   train <- indata[points, ]
   return(train)
 }
@@ -137,8 +152,8 @@ split_train <- function(indata){
 # Split data set into test data.
 #
 # Returns a data frame containing the test subset of indata.
-split_test <- function(indata){
-  points = select_train(indata)
+split_test <- function(indata, seed = 0){
+  points = select_train(indata, seed)
   test <- indata[-points, ]
   return(test)
 }

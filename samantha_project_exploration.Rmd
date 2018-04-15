@@ -19,8 +19,6 @@ source("ExperimentalFunctions.R")
 #data <- rbind(merge_sitl("mms_20151016.csv", "sitl_20151016.csv"), merge_sitl("mms_20151204.csv", "sitl_20151204.csv"))
 data <- merge_sitl("mms_20151016.csv", "sitl_20151016.csv")
 data$SelectedF <- as.factor(data$Selected)
-train <- split_train(data)
-test <- split_test(data)
 
 DES_set <- c("DES_Density", "DES_Temperature_para", "DES_Temperature_perp", "DES_Velocity_x", 
              "DES_Velocity_y", "DES_Velocity_z")
@@ -72,20 +70,20 @@ DES Density and FGM Mag. Field para/perp have a relationship that looks similar 
 
 ```{r, fig.width = 8, fig.asp = 1.5, fig.align = "center"}
 cowplot::plot_grid(
-  ggplot(data.frame(Para = train$DES_Temperature_para, Perp = train$DES_Temperature_perp), aes(x = Para, y = Perp)) + 
+  ggplot(data.frame(Para = data$DES_Temperature_para, Perp = data$DES_Temperature_perp), aes(x = Para, y = Perp)) + 
     geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "DES Temperature"),
-  ggplot(data.frame(Y = train$FGM_Magnetic_Field_y, Z = train$FGM_Magnetic_Field_z), aes(x = Y, y = Z, color = "#8f8699")) + 
+  ggplot(data.frame(Y = data$FGM_Magnetic_Field_y, Z = data$FGM_Magnetic_Field_z), aes(x = Y, y = Z, color = "#8f8699")) + 
     geom_point(colour = "#591d91", shape = 1) + theme_grey() + labs(title = "FGM Magnetic Field"),
-  ggplot(data.frame(Density = train$DES_Density, Velocity = train$DES_Velocity_x), aes(y = Density, x = Velocity)) + 
+  ggplot(data.frame(Density = data$DES_Density, Velocity = data$DES_Velocity_x), aes(y = Density, x = Velocity)) + 
     geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "DES Density & Velocity X"),
-  ggplot(data.frame(Density = train$DES_Density, Perp = train$DES_Temperature_perp), aes(y = Density, x = Perp, color = "#8f8699")) + 
+  ggplot(data.frame(Density = data$DES_Density, Perp = data$DES_Temperature_perp), aes(y = Density, x = Perp, color = "#8f8699")) + 
     geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "DES Density and FGM Magnetic Field"),
-  ggplot(data.frame(Density = train$DES_Density, Perp = ( 1 / train$DES_Temperature_perp )), aes(y = Density, x = Perp, color = "#8f8699")) + 
+  ggplot(data.frame(Density = data$DES_Density, Perp = ( 1 / data$DES_Temperature_perp )), aes(y = Density, x = Perp, color = "#8f8699")) + 
     geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "DES Density and FGM Magnetic Field") + xlab("1 / Perp"),
-  ggplot(data.frame(w = train$FGM_Magnetic_Field_w, z = train$FGM_Magnetic_Field_z), aes(y = w, x = z, color = "#8f8699")) + 
+  ggplot(data.frame(w = data$FGM_Magnetic_Field_w, z = data$FGM_Magnetic_Field_z), aes(y = w, x = z, color = "#8f8699")) + 
     geom_point(colour = "#591d91", shape = 1) + theme_grey() +
     labs(title = "FGM Magnetic Field"),
   ncol = 2
@@ -93,24 +91,39 @@ cowplot::plot_grid(
 ```
 
 ## Time Series Exploration
-```{r}
-glm.fit <- glmnetUtils::cv.glmnet(Selected ~ . - Time - Priority - SelectedF, data = train, family = "binomial")
-log.odds <- predict(glm.fit, data)
-probabilities <- exp(log.odds) / (1 + exp(log.odds))
-f = "basic.csv"
-save_predictions(probabilities, data$X, f)
-evaluate(data, f)
-```
-```{r}
-diffData <- data.frame(X = data$X, series_metric(data[,featureSubset], 20), data[, SEL_set])
-diffTrain <- split_train(diffData)
+```{r ts_base_comparison}
+train <- split_train(data, 100)
 
-glm.fit <- glmnetUtils::cv.glmnet(Selected ~ . - Time, data = diffTrain, family = "binomial")
-log.odds <- predict(glm.fit, diffData)
+log.lasso.fit <- glmnetUtils::cv.glmnet(Selected ~ . - Time - Priority - SelectedF, data = train, family = "binomial")
+log.odds <- predict(log.lasso.fit, data)
 probabilities <- exp(log.odds) / (1 + exp(log.odds))
-f = "time.series.metric.csv"
-save_predictions(probabilities, diffData$X, f)
-evaluate(data, f)
+cat("Basic Lasso Logistic Regression Error\n")
+#f = "basic.csv"
+#save_predictions(probabilities, data$X, f)
+#evaluate_file(data, f)
+evaluate_data(data, probabilities)
+```
+```{r ts_series_build}
+diffData <- data.frame(X = data$X, series_metric(data[,featureSubset], 20), data[, SEL_set], Priority = data$Priority)
+diffTrain <- split_train(diffData, 100)
+diffTest <- split_test(diffData, 100)
+```
+```{r ts_series_testdata}
+log.lasso.fit <- glmnetUtils::cv.glmnet(Selected ~ . - Time - Priority, data = diffTrain, family = "binomial")
+log.odds <- predict(log.lasso.fit, diffTest)
+probabilities <- exp(log.odds) / (1 + exp(log.odds))
+cat("Time Series Test error\n")
+evaluate_data(diffTest, probabilities)
+```
+```{r ts_series_wholedata}
+log.lasso.fit <- glmnetUtils::cv.glmnet(Selected ~ . - Time - Priority, data = diffTrain, family = "binomial")
+log.odds <- predict(log.lasso.fit, diffData)
+probabilities <- exp(log.odds) / (1 + exp(log.odds))
+cat("Time Series Total Error\n")
+#f = "time.series.metric.csv"
+#save_predictions(probabilities, diffData$X, f)
+#evaluate_file(diffData, f)
+evaluate_data(diffData, probabilities)
 ```
 
 ## Combination Exploration
