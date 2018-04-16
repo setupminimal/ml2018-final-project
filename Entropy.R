@@ -14,12 +14,15 @@ test_1 <- split_test(data_rolling)
 
 # I'm just going to try an SVM with the future-data and see how much better that does.
 
-rsvm.model <- svm(Selected ~ . - Priority, data = train_1, kernel = "radial")
+rsvm.model <- svm(Selected ~ . - Priority - Time, data = train_1, kernel = "radial", cross = 10)
 rsvm.prediction <- predict(rsvm.model, test_1)
 rsvm.classError <- sum(ifelse(rsvm.prediction == test_1$Selected, 0, 1)) / nrow(test_1)
 print(paste("RSVM Classfication Error: ", rsvm.classError))
+print(paste("RSVM Total Accuracy:", rsvm.model$tot.accuracy))
 
-caret::confusionMatrix(rsvm.prediction, test_1$Selected)
+evaluate_data(test_1, rsvm.prediction)
+
+# caret::confusionMatrix(rsvm.prediction, test_1$Selected)
 
 deal <- function (z) c(z[-1], sd(z[3]) + sd(z[4]) + sd(z[5])
                        + z[6])
