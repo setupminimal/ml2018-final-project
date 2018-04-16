@@ -3,6 +3,40 @@
 #   MMS CS 780 class project.
 # Authors: Daroc Alden, Jeremy Walker, & Samantha Piatt
 
+shift <- function(x, n){
+    c(tail(x, -n), rep(NA, n))
+}
+
+shiftData <- function (data) {
+  scols <- function(x, pre) {
+    y <- as.matrix(x)
+    tmp <- data.frame(shift(y, 1), shift(y, 2), shift(y, 3), shift(y, 4), shift(y, 5))
+    colnames(tmp) <- c(paste(pre, "1"), paste(pre, "2"), paste(pre, "3"),
+                    paste(pre, "4"), paste(pre, "5"))
+    return(tmp)
+  }
+  names <- colnames(data)
+  for (i in 1:length(data)) {
+    data <- data.frame(data, scols(data[i], names[i]))
+  }
+  
+  data$Selected.1 <- NULL
+  data$Selected.2 <- NULL
+  data$Selected.3 <- NULL
+  data$Selected.4 <- NULL
+  data$Selected.5 <- NULL
+  
+  data$Priority.1 <- NULL
+  data$Priority.2 <- NULL
+  data$Priority.3 <- NULL
+  data$Priority.4 <- NULL
+  data$Priority.5 <- NULL
+  
+  data$Selected <- as.factor(data$Selected)
+  
+  return(data)
+}
+
 # ------------------------------------------------------------------ Time Series
 # Creates four additional columns with data offset by one for each column.
 #   Theoretically, this should create a connection between the past two,
