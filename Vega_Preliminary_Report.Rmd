@@ -1,6 +1,6 @@
 ---
 title: "CS 780 MMs Class Project"
-author: "Vega Group: Daroc Alden, Jeremy Walker, Samantha Piatt"
+author: "Vega Group: Daroc Alden, Samantha Piatt, and Jeremy Walker"
 date: April 12, 2018
 output: pdf_document
 ---
@@ -8,6 +8,10 @@ output: pdf_document
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, fig.asp = 0.88, fig.width = 4)
 ```
 # Motivation
+
+This project is intended to explore opitons for automating a key part of the ongoing Magnetospheric Multiscale Mission - the selection of which detailed datapoints ought to be downloaded from the sattelite. This job is crrently done by a Scientist in the Loop, who must spend time each day evaluating the data observed by the satelite to decide how to spend bandwidth resources.
+
+Automating the selection of interesting data would free up valuable human time on the project. To do this, we have explored several methods for determining what data points might be interested, as detailed below.
 
 # Related work
 (papers describing machine learning methods or their applications)
