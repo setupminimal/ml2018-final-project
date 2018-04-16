@@ -127,15 +127,15 @@ evaluation <- function(mms.target, predictions){
   cat("Found SITL points: ", nrow(found), "\n")
   cat("Missed SITL points: ", nrow(missed), "\n")
   cat("Classification error: ", with(predictions_comparison,{mean(MITL_Selected != Selected)}), "\n")
-  cat("ERROR: ", sum(missed$Priority^2) / true.predictions.count, "\n")
+  cat("ERROR: ", sum(missed$Priority^2) / true.predictions.count, "\n\n")
 }
 
 # ------------------------------------------------------------------- Split Data
 # Calculate indexes for training subset.
 #
 # Returns a vector of row numbers to include in the training subset.
-select_train <- function(indata, seed) {
-  select = floor(0.75 * nrow(indata))
+select_train <- function(indata, size, seed) {
+  select = floor(size * nrow(indata))
   set.seed(seed)
   return(sample(seq_len(nrow(indata)), size = select))
 }
@@ -143,8 +143,8 @@ select_train <- function(indata, seed) {
 # Split data set into training data.
 #
 # Returns a data frame containing the training subset of indata.
-split_train <- function(indata, seed = 0){
-  points = select_train(indata, seed)
+split_train <- function(indata, size = 0.75, seed = 0){
+  points = select_train(indata, size, seed)
   train <- indata[points, ]
   return(train)
 }
@@ -152,8 +152,8 @@ split_train <- function(indata, seed = 0){
 # Split data set into test data.
 #
 # Returns a data frame containing the test subset of indata.
-split_test <- function(indata, seed = 0){
-  points = select_train(indata, seed)
+split_test <- function(indata, size = 0.75, seed = 0){
+  points = select_train(indata, size, seed)
   test <- indata[-points, ]
   return(test)
 }
