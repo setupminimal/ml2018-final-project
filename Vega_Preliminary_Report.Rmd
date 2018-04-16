@@ -6,6 +6,9 @@ output: pdf_document
 ---
 ```{r page_options, include = FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, fig.asp = 0.88, fig.width = 4)
+source("GetDataFunctions.R")
+source("ExperimentalFunctions.R")
+data <- merge_sitl("mms_20151016.csv", "sitl_20151016.csv")
 ```
 # Motivation
 
@@ -17,6 +20,17 @@ Automating the selection of interesting data would free up valuable human time o
 (papers describing machine learning methods or their applications)
 
 # Evaluation criteria
+
+We found that the data was not identically and independantly distributed, as demonstrated by the exemplary QQ plot below.
+
+```{r}
+lattice::qq(Selected ~ FGM_Magnetic_Field_w + DES_Velocity_z, data)
+```
+
+
+In fact the data is a time series. Therefore, we could not use the usual method of keeping some test data out to evaluate the performance of our model, because it would have left discontinuities in the data used for training our model.
+
+Therefore, we are using one of the two data sets as a validation set, while using the other data set in full to train our model. We hypothesise that adding time-delayed factors (i.e. factors which contain values from previous samples) will significantly improve the performance of many machine learning models on the validation set. See below for details.
 
 # Methods
 
