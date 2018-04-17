@@ -186,7 +186,7 @@ print_eval(difftrees(diff.rf.fit), "Time Difference data")
 
 ## Radial SVM
 ```{r RSVM}
-rsvm.fit <- e1071::svm(SelectedF ~ . - Time - Priority, 
+rsvm.fit <- e1071::svm(SelectedF ~ . - Time - Priority - Selected, 
                        data = baseTrain, kernel = "radial", probability = TRUE)
 shift.rsvm.fit <- e1071::svm(SelectedF ~ . - Time - Priority - Selected, 
                        data = shiftTrain, kernel = "radial", probability = TRUE)
