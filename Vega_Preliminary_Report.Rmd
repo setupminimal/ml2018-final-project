@@ -199,13 +199,44 @@ print_eval(diffsvm(diff.rsvm.fit), "Time Difference data")
 ```
 
 ## Validation
-We're using the second dataset as a validation set. Neither model performs exceptionally well on the validation set. Below is the performance of the Time Difference model on the second dataset.
+
+Since, during training, the version of each model using the time difference did significantly better for all models, we will compare those methods' performance on our validation set. Since none of the models perform exceptionally well here, it is likely that they have overfit. We suspect this may be an artifact of the different different SITLs on different weeks, or of our comparativly sparse training data. Regardless, the algorithm's performance on this validation set is a good indicator of its likely performance on the hidden test that you have for us, professor.
+
+Also: Since Logistic Regression did so poorly, we've chosen to omit it here for brevity.
 
 ```{r load_validationData}
 val <- merge_sitl("mms_20151204.csv", "sitl_20151204.csv")
 val$SelectedF <- as.factor(val$Selected)
 validate <- data.frame(val[,metricSubset], series_metric(val[,featureSubset], 20))
 ```
+
+### Bagging
+
+```{r bagging_validation}
+pred <- predict(diff.bag.fit, newdata = validate, type = 'prob')[,2]
+eval <- evaluate_data_asFrame(validate, pred)
+
+cat("Bagging Time Difference data", "\n--------------------------------------\n")
+cat("Total set of", eval$Total.SITL[1], "SITL points - Found:",
+      eval$Found.SITL[1], "Missed:", eval$Missed.SITL[1], "\n", 
+    "Classificaton Error - Total:", eval$Class.Error[1], "\n")
+```
+
+### Random Forest
+
+```{r}
+pred <- predict(diff.rf.fit, newdata = validate, type = 'prob')[,2]
+eval <- evaluate_data_asFrame(validate, pred)
+
+cat("Random Forests Time Difference data", "\n---------------------------------\n")
+cat("Total set of", eval$Total.SITL[1], "SITL points - Found:",
+      eval$Found.SITL[1], "Missed:", eval$Missed.SITL[1], "\n", 
+    "Classificaton Error - Total:", eval$Class.Error[1], "\n")
+```
+
+
+### Radial SVM
+
 ```{r RSVM_validation}
 rsvm.pred <- predict(diff.rsvm.fit, validate, probability = TRUE)
 rsvm.pred <- attr(rsvm.pred, "probabilities")[,2]
@@ -215,15 +246,6 @@ cat("Radial SVM Time Difference data", "\n--------------------------------------
 cat("Total set of", eval$Total.SITL[1], "SITL points - Found:",
       eval$Found.SITL[1], "Missed:", eval$Missed.SITL[1], "\n",
       "Classificaton Error - Total:", eval$Class.Error[1], "\n")
-```
-```{r bagging_validation}
-pred <- predict(diff.bag.fit, newdata = validate, type = 'prob')[,2]
-eval <- evaluate_data_asFrame(validate, pred)
-
-cat("Bagging Time Difference data", "\n--------------------------------------\n")
-cat("Total set of", eval$Total.SITL[1], "SITL points - Found:",
-      eval$Found.SITL[1], "Missed:", eval$Missed.SITL[1], "\n", 
-    "Classificaton Error - Total:", eval$Class.Error[1], "\n")
 ```
 
 # Recommendations
