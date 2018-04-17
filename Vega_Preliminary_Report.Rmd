@@ -254,3 +254,5 @@ Random Forests with Time Difference data did best on our validation set out of a
 
 
 # Analysis
+
+Since Random Forests did less well on our training data, but better on our validation set, it seems likely that other methods overfit. This can be solved in a few ways, not least of which will be to acquire more data. Overfitting is evidence that our methods are too flexible - so another way to reduce their flexibility would be to use bagging or boosting in combination with another method, or to use cross-validation to choose such parameters as the amount of time-shift to use.
