@@ -2,7 +2,7 @@
 #   Created for the Vega group to import, clean and transform data for the
 #   MMS CS 780 class project.
 # Authors: Daroc Alden, Jeremy Walker, & Samantha Piatt
-
+library(dplyr)
 
 # ----------------------------------------------------------- Open and Save Data
 # Create data frame from mms and sitl data.
@@ -44,48 +44,6 @@ merge_sitl <- function(ina, inb) {
   return(outdata)
 }
 
-# Create data frame from mms and sitl data.
-#   DOES NOT WORK. This is from the evaluation document.
-#   Keeps throwing a lot of errors.
-#
-# Returns a data frame containing merged feature set with sitl response columns.
-evaluation_merge <- function(mms_filename, sitl_filename){
-  # make sure that X1 is a correct row index (it is 0-based originally)
-  mms <- na.omit(read.csv(mms_filename)) %>% dplyr::mutate(X1 = X + 1)
-  sitl <- na.omit(read.csv(sitl_filename))
-
-  # convert time to milliseconds ... interval_inner_join works also with
-  # date-time directly but then it ingores milliseconds. This makes a small
-  # difference in this example
-  min.time <- min(mms$Time)
-  convert.time <- function(x) as.integer(1000*difftime(x, min.time, units="secs"))
-
-  mms.id <- mms %>% dplyr::transmute(Start = convert.time(Time), End = Start, X1 = X1)
-  sitl.id <- sitl %>% select(c(Start,End,Priority)) %>%
-    dplyr::mutate(Start = convert.time(Start), End = convert.time(End))
-
-  joined <- interval_inner_join(sitl.id, mms.id, c("Start","End")) %>% group_by(X1) %>%
-
-  mms.target <- mms
-  mms.target$Selected <- F
-  mms.target$Selected[joined$X1] <- T
-  mms.target$Selected = as.factor(mms.target$Selected)
-  mms.target$Priority <- 0
-  mms.target$Priority[joined$X1] <- joined$Priority
-  return(mms.target)
-}
-
-# Open a saved Evaluation file
-#   File should be saved using below save_predictions function (or equivalent).
-#   Input mms.target should be a data frame containing an 'X' column ofindex values and a 'Selected' 
-#   column of sitl values.
-#
-# Outputs performance data.
-evaluate_file <- function(data, file) {
-  predictions <- read.csv(file)
-  evaluation(data, predictions)
-}
-
 # Saves prediction values for evaluation.
 #
 # Outputs a file containing the index and prediction value.
@@ -94,19 +52,39 @@ save_predictions <- function(pred, ID, file){
   write.csv(output, file)
 }
 
+# -----------------------------------------------------------------Evaluate Data
+# Open a saved Evaluation file
+#   File should be saved using below save_predictions function (or equivalent).
+#   Input mms.target should be a data frame containing an 'X' column ofindex 
+#   values and a 'Selected' column of sitl values.
+#
+# Outputs performance data.
+evaluate_file <- function(data, file) {
+  predictions <- read.csv(file)
+  print_evaluation(evaluation(data, predictions))
+}
+
 # This cirucumvents saving to a file, and can be used with test data.
 #
 # Outputs performance data.
 evaluate_data <- function(data, prediction){
   predictions <- data.frame(ObservationId = data$X, Selected = c(prediction))
-  evaluation(data, predictions)
+  print_evaluation(evaluation(data, predictions))
+}
+
+# Does the same thing as evaluate_data but returns a data.frame instead of 
+#   printing it all out.
+#
+# Returns a data frame with evaluation metrics.
+evaluate_data_asFrame <- function(data, prediction){
+  predictions <- data.frame(ObservationId = data$X, Selected = c(prediction))
+  return(evaluation(data, predictions))
 }
 
 # Evaluates target and predictions. To be used with evaluate_file or evaluate_data
 #
 # Outputs performance data.
 evaluation <- function(mms.target, predictions){
-  library(dplyr)
   #sort them by prediction weight
   predictions <- predictions[order(predictions$Selected, decreasing = TRUE),]
   
@@ -123,11 +101,19 @@ evaluation <- function(mms.target, predictions){
   found <- predictions_comparison %>% filter(Selected == T & MITL_Selected == T)
   missed <- predictions_comparison %>% filter(Selected == T & MITL_Selected == F)
   
-  cat("Total SITL points: ", true.predictions.count, "\n")
-  cat("Found SITL points: ", nrow(found), "\n")
-  cat("Missed SITL points: ", nrow(missed), "\n")
-  cat("Classification error: ", with(predictions_comparison,{mean(MITL_Selected != Selected)}), "\n")
-  cat("ERROR: ", sum(missed$Priority^2) / true.predictions.count, "\n\n")
+  return(data.frame("Total SITL" = true.predictions.count, 
+    "Found SITL" = nrow(found), "Missed SITL" = nrow(missed), 
+    "Class Error" = with(predictions_comparison,{mean(MITL_Selected != Selected)}),
+    "ERROR" = sum(missed$Priority^2) / true.predictions.count))
+}
+
+# Prints the evaluation data
+print_evaluation <- function(eval){
+  cat("\nTotal SITL points: ", eval$Total.SITL, "\n")
+  cat("Found SITL points: ", eval$Found.SITL, "\n")
+  cat("Missed SITL points: ", eval$Missed.SITL, "\n")
+  cat("Classification error: ", eval$Class.Error, "\n")
+  cat("ERROR: ", eval$ERROR, "\n")
 }
 
 # ------------------------------------------------------------------- Split Data

@@ -1,14 +1,104 @@
 ---
 title: "CS 780 MMs Class Project"
+subtitle: "Preliminary Report"
 author: "Vega Group: Daroc Alden, Samantha Piatt, and Jeremy Walker"
 date: April 12, 2018
 output: pdf_document
 ---
 ```{r page_options, include = FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, fig.asp = 0.88, fig.width = 4)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, fig.asp = 0.88, fig.width = 4, error = FALSE)
+
 source("GetDataFunctions.R")
 source("ExperimentalFunctions.R")
-data <- merge_sitl("mms_20151016.csv", "sitl_20151016.csv")
+```
+```{r load_data}
+featureSubset <- c("DES_Density", "DES_Temperature_para", "DES_Temperature_perp", 
+                   "DES_Velocity_x", "DES_Velocity_y", "DES_Velocity_z",
+                   "DIS_Density", "DIS_Temperature_para", "DIS_Temperature_perp", 
+                   "DIS_Velocity_x", "DIS_Velocity_y", "DIS_Velocity_z",
+                   "FGM_Magnetic_Field_w", "FGM_Magnetic_Field_x", 
+                   "FGM_Magnetic_Field_y", "FGM_Magnetic_Field_z")
+metricSubset <- c("X", "Time", "Priority", "Selected", "SelectedF")
+
+sseed = 100
+```
+```{r}
+baseData <- merge_sitl("mms_20151016.csv", "sitl_20151016.csv")
+baseData$SelectedF <- as.factor(baseData$Selected)
+baseTrain <- split_train(baseData, seed = sseed)
+baseTest <- split_test(baseData, seed = sseed)
+
+diffData <- data.frame(baseData[,metricSubset], series_metric(baseData[,featureSubset], 20))
+diffTrain <- split_train(diffData, seed = sseed)
+diffTest <- split_test(diffData, seed = sseed)
+
+shiftData <- data.frame(tail(baseData[,metricSubset], -5), na.omit(shiftData(baseData[,featureSubset])))
+shiftTrain <- split_train(shiftData, seed = sseed)
+shiftTest <- split_test(shiftData, seed = sseed)
+```
+```{r predictAndFormat_functions}
+etrees <- function(fit, train, test, data){
+  bag.pred <- predict(fit, newdata = test, type = 'prob')[,2]
+  eval.test <- evaluate_data_asFrame(test, bag.pred)
+  
+  bag.pred <- predict(fit, newdata = train, type = 'prob')[,2]
+  eval.train <- evaluate_data_asFrame(train, bag.pred)
+  
+  bag.pred <- predict(fit, newdata = data, type = 'prob')[,2]
+  eval.total <- evaluate_data_asFrame(data, bag.pred)
+  return(rbind(eval.test, eval.train, eval.total))
+}
+basetrees <- function(fit) etrees(fit, baseTrain, baseTest, baseData)
+difftrees <- function(fit) etrees(fit, diffTrain, diffTest, diffData)
+shifttrees <- function(fit) etrees(fit, shiftTrain, shiftTest, shiftData)
+
+esvm <- function(fit, train, test, data){
+  rsvm.pred <- predict(fit, train, probability = TRUE)
+  rsvm.pred <- attr(rsvm.pred, "probabilities")[,2]
+  eval.test <- evaluate_data_asFrame(train, rsvm.pred)
+  
+  rsvm.pred <- predict(fit, test, probability = TRUE)
+  rsvm.pred <- attr(rsvm.pred, "probabilities")[,2]
+  eval.train <- evaluate_data_asFrame(test, rsvm.pred)
+  
+  rsvm.pred <- predict(fit, data, probability = TRUE)
+  rsvm.pred <- attr(rsvm.pred, "probabilities")[,2]
+  eval.total <- evaluate_data_asFrame(data, rsvm.pred)
+  return(rbind(eval.test, eval.train, eval.total))
+}
+basesvm <- function(fit) esvm(fit, baseTrain, baseTest, baseData)
+diffsvm <- function(fit) esvm(fit, diffTrain, diffTest, diffData)
+shiftsvm <- function(fit) esvm(fit, shiftTrain, shiftTest, shiftData)
+
+elog <- function(fit, train, test, data){
+  log.pred <- predict(fit, test, type = "response")
+  log.pred <- exp(log.pred) / (1 + exp(log.pred))
+  eval.test <- evaluate_data_asFrame(test, log.pred)
+  
+  log.pred <- predict(fit, train, type = "response")
+  log.pred <- exp(log.pred) / (1 + exp(log.pred))
+  eval.train <- evaluate_data_asFrame(train, log.pred)
+  
+  log.pred <- predict(fit, data, type = "response")
+  log.pred <- exp(log.pred) / (1 + exp(log.pred))
+  eval.total <- evaluate_data_asFrame(data, log.pred)
+  return(rbind(eval.test, eval.train, eval.total))
+}
+baselog <- function(fit) elog(fit, baseTrain, baseTest, baseData)
+difflog <- function(fit) elog(fit, diffTrain, diffTest, diffData)
+shiftlog <- function(fit) elog(fit, shiftTrain, shiftTest, shiftData)
+
+print_eval <- function(eval, title){
+  cat(title, "\n--------------------------------------\n")
+  cat("Test set of", eval$Total.SITL[1], "SITL points - Found:", 
+      eval$Found.SITL[1], "Missed:", eval$Missed.SITL[1], "\n")
+  cat("Training set of", eval$Total.SITL[2], "SITL points - Found:", 
+      eval$Found.SITL[2], "Missed:", eval$Missed.SITL[2], "\n")
+  cat("Total set of", eval$Total.SITL[3], "SITL points - Found:",
+      eval$Found.SITL[3], "Missed:", eval$Missed.SITL[3], "\n")
+  cat("Classificaton Error - Test:", eval$Class.Error[1], 
+      "Training:", eval$Class.Error[2], "Total:", eval$Class.Error[3], "\n")
+}
 ```
 # Motivation
 
@@ -23,8 +113,8 @@ Automating the selection of interesting data would free up valuable human time o
 
 We found that the data was not identically and independantly distributed, as demonstrated by the exemplary QQ plot below.
 
-```{r}
-lattice::qq(Selected ~ FGM_Magnetic_Field_w + DES_Velocity_z, data)
+```{r qq_plot}
+lattice::qq(Selected ~ FGM_Magnetic_Field_w + DES_Velocity_z, baseData)
 ```
 
 
@@ -33,8 +123,112 @@ In fact the data is a time series. Therefore, we could not use the usual method 
 Therefore, we are using one of the two data sets as a validation set, while using the other data set in full to train our model. We hypothesise that adding time-delayed factors (i.e. factors which contain values from previous samples) will significantly improve the performance of many machine learning models on the validation set. See below for details.
 
 # Methods
+We compared our time series models against the basic feature set with no consideration for time, using multiple machine learning methods.
+
+Our first time series model, which we will call time shifting, involves adding n columns to the data that contain each feature shifted n = 5 points in the past. The second time series model, which we willl call time difference, involves adding a column which takes the average differece between the current data point x and the past n = 20 data points.
+
+## Logistic Regression
+```{r logistic}
+log.fit <- glm(Selected ~ . - Time - Priority - SelectedF, 
+               data = baseTrain, family = "binomial")
+log.eval <- baselog(log.fit)
+
+shift.log.fit <- glm(Selected ~ . - Time - Priority - SelectedF, 
+                    data = shiftTrain, family = "binomial")
+shift.log.eval <- shiftlog(shift.log.fit)
+
+diff.log.fit <- glm(Selected ~ . - Time - Priority - SelectedF, 
+                    data = diffTrain, family = "binomial")
+diff.log.eval <- difflog(diff.log.fit)
+
+print_eval(log.eval, "Basic MMS data")
+print_eval(shift.log.eval, "Time Shift data")
+print_eval(diff.log.eval, "Time Diference data")
+```
+
+## Bagging
+Using 16 splits (number of features).
+
+```{r bagging}
+bag.fit <- randomForest::randomForest(SelectedF ~ . - Time - Priority - Selected, 
+                                      data = baseTrain, mtry = length(featureSubset),
+                                      importance = TRUE)
+shift.bag.fit <- randomForest::randomForest(SelectedF ~ . - Time - Priority - Selected, 
+                                      data = shiftTrain, mtry = length(featureSubset), 
+                                      importance = TRUE)
+diff.bag.fit <- randomForest::randomForest(SelectedF ~ . - Time - Priority - Selected, 
+                                      data = diffTrain, mtry = length(featureSubset), 
+                                      importance = TRUE)
+
+print_eval(basetrees(bag.fit), "Basic MMS data Set")
+print_eval(shifttrees(shift.bag.fit), "Time Shift data")
+print_eval(difftrees(diff.bag.fit), "Time Difference data")
+```
+
+## Random Forests
+Using 4 splits (square root of number of features).
+
+```{r rforests}
+rf.fit <- randomForest::randomForest(SelectedF ~ . - Time - Priority - Selected, 
+                                     data = baseTrain, mtry = sqrt(length(featureSubset)), 
+                                     importance = TRUE)
+shift.rf.fit <- randomForest::randomForest(SelectedF ~ . - Time - Priority - Selected, 
+                                     data = shiftTrain, mtry = sqrt(length(featureSubset)), 
+                                     importance = TRUE)
+diff.rf.fit <- randomForest::randomForest(SelectedF ~ . - Time - Priority - Selected, 
+                                     data = diffTrain, mtry = sqrt(length(featureSubset)), 
+                                     importance = TRUE)
+
+print_eval(basetrees(rf.fit), "Basic MMS data Set")
+print_eval(shifttrees(shift.rf.fit), "Time Shift data")
+print_eval(difftrees(diff.rf.fit), "Time Difference data")
+```
+
+## Radial SVM
+```{r RSVM}
+rsvm.fit <- e1071::svm(SelectedF ~ . - Time - Priority, 
+                       data = baseTrain, kernel = "radial", probability = TRUE)
+shift.rsvm.fit <- e1071::svm(SelectedF ~ . - Time - Priority - Selected, 
+                       data = shiftTrain, kernel = "radial", probability = TRUE)
+diff.rsvm.fit <- e1071::svm(SelectedF ~ . - Time - Priority - Selected, 
+                       data = diffTrain, kernel = "radial", probability = TRUE)
+
+print_eval(basesvm(rsvm.fit), "Basic MMS data")
+print_eval(shiftsvm(shift.rsvm.fit), "Time Shift data")
+print_eval(diffsvm(diff.rsvm.fit), "Time Difference data")
+```
+
+## Validation
+We're using the second dataset as a validation set. Neither model performs exceptionally well on the validation set. Below is the performance of the Time Difference model on the second dataset.
+
+```{r load_validationData}
+val <- merge_sitl("mms_20151204.csv", "sitl_20151204.csv")
+val$SelectedF <- as.factor(val$Selected)
+validate <- data.frame(val[,metricSubset], series_metric(val[,featureSubset], 20))
+```
+```{r RSVM_validation}
+rsvm.pred <- predict(diff.rsvm.fit, validate, probability = TRUE)
+rsvm.pred <- attr(rsvm.pred, "probabilities")[,2]
+eval <- evaluate_data_asFrame(validate, rsvm.pred)
+
+cat("Radial SVM Time Difference data", "\n--------------------------------------\n")
+cat("Total set of", eval$Total.SITL[1], "SITL points - Found:",
+      eval$Found.SITL[1], "Missed:", eval$Missed.SITL[1], "\n",
+      "Classificaton Error - Total:", eval$Class.Error[1], "\n")
+```
+```{r bagging_validation}
+pred <- predict(diff.bag.fit, newdata = validate, type = 'prob')[,2]
+eval <- evaluate_data_asFrame(validate, pred)
+
+cat("Bagging Time Difference data", "\n--------------------------------------\n")
+cat("Total set of", eval$Total.SITL[1], "SITL points - Found:",
+      eval$Found.SITL[1], "Missed:", eval$Missed.SITL[1], "\n", 
+    "Classificaton Error - Total:", eval$Class.Error[1], "\n")
+```
 
 # Recommendations
 best method with an estimate of prediction quality
+
+
 
 # Analysis
