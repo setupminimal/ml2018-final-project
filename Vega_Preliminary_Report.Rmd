@@ -249,8 +249,8 @@ cat("Total set of", eval$Total.SITL[1], "SITL points - Found:",
 ```
 
 # Recommendations
-best method with an estimate of prediction quality
 
+Random Forests with Time Difference data did best on our validation set out of all tested methods. With a classification error of 12.73%, they are not as accurate as we might hope, but since we tested each of the methods on a validtation set which is similar to the set we will be tested on, we hope that it will have a similar classification error there.
 
 
 # Analysis
