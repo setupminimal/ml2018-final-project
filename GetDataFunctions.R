@@ -10,7 +10,7 @@ packnload <- function(name){
   if(!(name %in% rownames(installed.packages())) )
     install.packages(name)
 
-  library(name)
+  lapply(name, require, character.only = TRUE)
 }
 
 packnload("dplyr")
