@@ -2,7 +2,18 @@
 #   Created for the Vega group to import, clean and transform data for the
 #   MMS CS 780 class project.
 # Authors: Daroc Alden, Jeremy Walker, & Samantha Piatt
-library(dplyr)
+
+# --------------------------------------------------------------------- Packages
+# Checks if the package (or packages when a vector of names is passed) is 
+#   installed. If it is not, then it will be installed and loaded.
+packnload <- function(name){
+  if(!(name %in% rownames(installed.packages())) )
+    install.packages(name)
+
+  library(name)
+}
+
+packnload("dplyr")
 
 # ----------------------------------------------------------- Open and Save Data
 # Create data frame from mms and sitl data.
@@ -41,7 +52,7 @@ merge_sitl <- function(ina, inb) {
     }
   }
 
-  return(outdata)
+  return(outdata[order(outdata$Time),])
 }
 
 # Saves prediction values for evaluation.
