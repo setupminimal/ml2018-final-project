@@ -114,7 +114,8 @@ Automating the selection of interesting data would free up valuable human time o
 We found that the data was not identically and independantly distributed, as demonstrated by the exemplary QQ plot below.
 
 ```{r qq_plot}
-lattice::qq(Selected ~ FGM_Magnetic_Field_w + DES_Velocity_z, baseData)
+m1 <- lm(Selected ~ FGM_Magnetic_Field_w + DES_Velocity_z, baseData)
+qqnorm(resid(m1))
 ```
 
 
