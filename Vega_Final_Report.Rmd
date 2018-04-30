@@ -107,14 +107,19 @@ This project is intended to explore opitons for automating a key part of the ong
 Automating the selection of interesting data would free up valuable human time on the project. To do this, we have explored several methods for determining what data points might be interested, as detailed below.
 
 # Related work
-(papers describing machine learning methods or their applications)
+Accuracy of Extrapolation (Time Series) Methods: Results of a Forecasting Competition by S. Makridakit et al. is a definitive comparison of different forecasting methods on different types of and horizons of data. While this is not a forecasting problem per se, the conclusion that they draw is likely appropriate to our problem because of the complex and varied nature of the S.I.T.Ls who decide what data ought to be acquired from the satelite: "[S]tatistically sophisticated methods do not do better than simple methods ... when there is considerable randomness in the data." (pg. 142 in the Journal of Forecasting, Vol 1, Iss. No. 2)
+
+Rolling Window Selection for Out-of-Sample Forecasting with Time-Varying Parameters by Atsushi Inoue, Lu Jin, and Barbara Rossi reccomends limiting the size of the window of data used for forecasting so that regime changes in the input data don't disrupt the fit of one's model. Unfortunatly, this is not directly applicable to our project either, since we do not have access to all the data up to the present day, but instead only have selected samples.
+
+Time Series Prediction Using Support Vector Machines: A Survey by Jicholas Sapaankevych and Ravi Sankar points out that in the most common application for predicting time series data - the financial sector - a weighted variant of SVMs is often used called C-ascending SVMs, and that these have proven more adaptable, since they emphasize recent or current data over older data.
 
 # Evaluation criteria
 
 We found that the data was not identically and independantly distributed, as demonstrated by the exemplary QQ plot below.
 
 ```{r qq_plot}
-lattice::qq(Selected ~ FGM_Magnetic_Field_w + DES_Velocity_z, baseData)
+m1 <- lm(Selected ~ FGM_Magnetic_Field_w + DES_Velocity_z, baseData)
+qqnorm(resid(m1))
 ```
 
 
