@@ -1,5 +1,5 @@
 ---
-title: "CS 780 MMs Class Project"
+title: "CS 780 MMS Class Project"
 subtitle: "Preliminary Report"
 author: "Vega Group: Daroc Alden, Samantha Piatt, and Jeremy Walker"
 date: April 12, 2018
@@ -86,9 +86,7 @@ qqnorm(resid(m1))
 ```
 
 
-In fact the data is a time series. Therefore, we could not use the usual method of keeping some test data out to evaluate the performance of our model, because it would have left discontinuities in the data used for training our model.
-
-Therefore, we are using one of the two data sets as a validation set, while using the other data set in full to train our model. We hypothesise that adding time-delayed factors (i.e. factors which contain values from previous samples) will significantly improve the performance of many machine learning models on the validation set. See below for details.
+In fact the data is a time series. We hypothesise that adding time-delayed factors (i.e. factors which contain values from previous samples) will significantly improve the performance of many machine learning models on the validation set. See below for details.
 
 # Methods
 We compared our time series models against the basic feature set with no consideration for time, using multiple machine learning methods.
@@ -98,12 +96,20 @@ Our first time series model, which we will call time shifting, involves adding n
 ## Random Forests
 Using 4 splits (square root of number of features).
 
+```{r}
+#ttt <- rf.diff.subset
+#ttt$Priority <- NULL
+#blah <- rfcv(ttt, rf.diff.subset$Priority, ntree = 10)
+```
+
+
 ```{r rf_model}
 rf.diff.subset <- diff.train[ ,!(colnames(diff.train) %in% c("Selected"))]
 #rf.shift.subset <- shift.train[ ,!(colnames(shift.train) %in% c("Selected"))]
 
+# Note: mtry was picked using Cross Validation, in the commented out block above.
 rf.diff.fit <- randomForest(Priority ~ . - X, data = rf.diff.subset, 
-                       mtry = 5, importance = TRUE, ntree = 1000)
+                       mtry = 30, importance = TRUE, ntree = 100)
 #rf.shift.fit <- randomForest(Priority ~ . - X, data = rf.shift.subset, 
 #                       mtry = 5, importance = TRUE, ntree = 1000)
 ```
@@ -120,7 +126,7 @@ eval.total <- evaluate_data_asFrame(diff.total, pred)
 rf.diff.eval <- rbind(eval.test, eval.train, eval.total)
 row.names(rf.diff.eval) <- c("Test", "Train", "Total")
 
-kable(rf.diff.eval, "html") %>% kable_styling(bootstrap_options = "striped") %>% 
+kable(rf.diff.eval, "latex") %>% kable_styling(bootstrap_options = "striped") %>% 
   column_spec(c(1, 5:6), bold = T)
 ```
 
@@ -147,8 +153,7 @@ kable(rf.diff.val, "html") %>% kable_styling(bootstrap_options = "striped") %>% 
 
 # Recommendations
 
-Random Forests with Time Difference data did best on our validation set out of all tested methods. With a classification error of 12.73%, they are not as accurate as we might hope, but since we tested each of the methods on a validtation set which is similar to the set we will be tested on, we hope that it will have a similar classification error there.
-
+TODO
 
 # Analysis
 
