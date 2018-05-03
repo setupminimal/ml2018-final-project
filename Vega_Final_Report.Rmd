@@ -81,7 +81,7 @@ Time Series Prediction Using Support Vector Machines: A Survey by Jicholas Sapaa
 We found that the data was not identically and independantly distributed, as demonstrated by the exemplary QQ plot below.
 
 ```{r qq_plot}
-m1 <- lm(Selected ~ FGM_Magnetic_Field_w + DES_Velocity_z, diff.data)
+m1 <- lm(Selected ~ FGM_Magnetic_Field_w + DES_Velocity_z, base.data)
 qqnorm(resid(m1))
 ```
 
@@ -98,14 +98,10 @@ Our first time series model, which we will call time shifting, involves adding n
 ## Random Forests
 Using 4 splits (square root of number of features).
 
-```{r rf_model}
+```{r rf_model_diff}
 rf.diff.subset <- diff.train[ ,!(colnames(diff.train) %in% c("Selected"))]
-#rf.shift.subset <- shift.train[ ,!(colnames(shift.train) %in% c("Selected"))]
-
 rf.diff.fit <- randomForest(Priority ~ . - X, data = rf.diff.subset, 
                        mtry = 5, importance = TRUE, ntree = 1000)
-#rf.shift.fit <- randomForest(Priority ~ . - X, data = rf.shift.subset, 
-#                       mtry = 5, importance = TRUE, ntree = 1000)
 ```
 ```{r}
 pred <- predict(rf.diff.fit, newdata = diff.test)
@@ -118,10 +114,54 @@ pred <- predict(rf.diff.fit, newdata = diff.total)
 eval.total <- evaluate_data_asFrame(diff.total, pred)
 
 rf.diff.eval <- rbind(eval.test, eval.train, eval.total)
-row.names(rf.diff.eval) <- c("Test", "Train", "Total")
+row.names(rf.diff.eval) <- c("Difference Test", "Difference Train", "Difference Total")
+```
 
-kable(rf.diff.eval, "html") %>% kable_styling(bootstrap_options = "striped") %>% 
-  column_spec(c(1, 5:6), bold = T)
+```{r rf_model_shift}
+rf.shift.subset <- na.omit(shift.train[ ,!(colnames(shift.train) %in% c("Selected"))])
+rf.shift.fit <- randomForest(Priority ~ . - X, data = rf.shift.subset, 
+                       mtry = 5, importance = TRUE, ntree = 1000)
+```
+```{r}
+pred <- predict(rf.shift.fit, newdata = shift.test)
+eval.test <- evaluate_data_asFrame(shift.test, pred)
+
+pred <- predict(rf.shift.fit, newdata = shift.train)
+eval.train <- evaluate_data_asFrame(shift.train, pred)
+
+pred <- predict(rf.shift.fit, newdata = shift.total)
+eval.total <- evaluate_data_asFrame(shift.total, pred)
+
+rf.shift.eval <- rbind(eval.test, eval.train, eval.total)
+row.names(rf.shift.eval) <- c("Shift Test", "Shift Train", "Shift Total")
+```
+
+```{r rf_model_base}
+rf.base.subset <- base.train[ ,!(colnames(base.train) %in% c("Selected"))]
+rf.base.fit <- randomForest(Priority ~ . - X, data = rf.base.subset, 
+                       mtry = 5, importance = TRUE, ntree = 1000)
+```
+```{r}
+pred <- predict(rf.base.fit, newdata = base.test)
+eval.test <- evaluate_data_asFrame(base.test, pred)
+
+pred <- predict(rf.base.fit, newdata = base.train)
+eval.train <- evaluate_data_asFrame(base.train, pred)
+
+pred <- predict(rf.base.fit, newdata = base.total)
+eval.total <- evaluate_data_asFrame(base.total, pred)
+
+rf.base.eval <- rbind(eval.test, eval.train, eval.total)
+row.names(rf.base.eval) <- c("Base Test", "Base Train", "Base Total")
+```
+
+```{r}
+rf.eval <- rbind(rf.base.eval, rf.shift.eval, rf.diff.eval)
+kable(rf.eval, "html") %>% kable_styling(bootstrap_options = "striped") %>% 
+  column_spec(c(1, 5:6), bold = T)%>%
+  group_rows("Basic Data", 1, 3) %>%
+  group_rows("Time Shift Data", 4, 6) %>%
+  group_rows("Difference Data", 7, 9)
 ```
 
 ## Validation
