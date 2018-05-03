@@ -96,67 +96,43 @@ We compared our time series models against the basic feature set with no conside
 Our first time series model, which we will call time shifting, involves adding n columns to the data that contain each feature shifted n = 5 points in the past. The second time series model, which we willl call time difference, involves adding a column which takes the average differece between the current data point x and the past n = 20 data points.
 
 ## Random Forests
-Using 4 splits (square root of number of features).
+Using 5 splits (square root of number of features).
+```{r rf_eval_function}
+etrees <- function(fit, tr, tst, ttl, prefix = ""){
+  pred <- predict(fit, newdata = tst)
+  eval.test <- evaluate_data_asFrame(tst, pred)
+  
+  pred <- predict(fit, newdata = tr)
+  eval.train <- evaluate_data_asFrame(tr, pred)
+  
+  pred <- predict(fit, newdata = ttl)
+  eval.total <- evaluate_data_asFrame(ttl, pred)
+  evals <- rbind(eval.test, eval.train, eval.total)
+  row.names(evals) <- c(paste(prefix, "Test"), paste(prefix, "Train"), 
+                        paste(prefix, "Total"))
+  return(evals)
+}
+```
+```{r rf_models}
+depth = 5
+treeCount = 1000
 
-```{r rf_model_diff}
 rf.diff.subset <- diff.train[ ,!(colnames(diff.train) %in% c("Selected"))]
 rf.diff.fit <- randomForest(Priority ~ . - X, data = rf.diff.subset, 
-                       mtry = 5, importance = TRUE, ntree = 1000)
-```
-```{r}
-pred <- predict(rf.diff.fit, newdata = diff.test)
-eval.test <- evaluate_data_asFrame(diff.test, pred)
+                       mtry = depth, importance = TRUE, ntree = treeCount)
 
-pred <- predict(rf.diff.fit, newdata = diff.train)
-eval.train <- evaluate_data_asFrame(diff.train, pred)
-
-pred <- predict(rf.diff.fit, newdata = diff.total)
-eval.total <- evaluate_data_asFrame(diff.total, pred)
-
-rf.diff.eval <- rbind(eval.test, eval.train, eval.total)
-row.names(rf.diff.eval) <- c("Difference Test", "Difference Train", "Difference Total")
-```
-
-```{r rf_model_shift}
 rf.shift.subset <- na.omit(shift.train[ ,!(colnames(shift.train) %in% c("Selected"))])
 rf.shift.fit <- randomForest(Priority ~ . - X, data = rf.shift.subset, 
-                       mtry = 5, importance = TRUE, ntree = 1000)
-```
-```{r}
-pred <- predict(rf.shift.fit, newdata = shift.test)
-eval.test <- evaluate_data_asFrame(shift.test, pred)
+                       mtry = depth, importance = TRUE, ntree = treeCount)
 
-pred <- predict(rf.shift.fit, newdata = shift.train)
-eval.train <- evaluate_data_asFrame(shift.train, pred)
-
-pred <- predict(rf.shift.fit, newdata = shift.total)
-eval.total <- evaluate_data_asFrame(shift.total, pred)
-
-rf.shift.eval <- rbind(eval.test, eval.train, eval.total)
-row.names(rf.shift.eval) <- c("Shift Test", "Shift Train", "Shift Total")
-```
-
-```{r rf_model_base}
 rf.base.subset <- base.train[ ,!(colnames(base.train) %in% c("Selected"))]
 rf.base.fit <- randomForest(Priority ~ . - X, data = rf.base.subset, 
-                       mtry = 5, importance = TRUE, ntree = 1000)
+                       mtry = depth, importance = TRUE, ntree = treeCount)
 ```
-```{r}
-pred <- predict(rf.base.fit, newdata = base.test)
-eval.test <- evaluate_data_asFrame(base.test, pred)
-
-pred <- predict(rf.base.fit, newdata = base.train)
-eval.train <- evaluate_data_asFrame(base.train, pred)
-
-pred <- predict(rf.base.fit, newdata = base.total)
-eval.total <- evaluate_data_asFrame(base.total, pred)
-
-rf.base.eval <- rbind(eval.test, eval.train, eval.total)
-row.names(rf.base.eval) <- c("Base Test", "Base Train", "Base Total")
-```
-
-```{r}
-rf.eval <- rbind(rf.base.eval, rf.shift.eval, rf.diff.eval)
+```{r rf_evals}
+rf.eval <- rbind(etrees(rf.base.fit, base.test, base.train, base.total, "Difference"),
+                 etrees(rf.shift.fit, shift.test, shift.train, shift.total, "Shift"),
+                 etrees(rf.diff.fit, diff.train, diff.test, diff.total, "Base"))
 kable(rf.eval, "html") %>% kable_styling(bootstrap_options = "striped") %>% 
   column_spec(c(1, 5:6), bold = T)%>%
   group_rows("Basic Data", 1, 3) %>%
