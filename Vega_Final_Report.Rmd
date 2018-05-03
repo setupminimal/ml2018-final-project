@@ -14,6 +14,7 @@ source("ExperimentalFunctions.R")
 library(knitr)
 library(kableExtra)
 library(randomForest)
+library(e1071)
 #library(ggplot)
 ```
 ```{r load_data}
@@ -40,9 +41,10 @@ shift.data2 <- data.frame(baseData2[,metricSubset],
 
 base.data1 <- data.frame(baseData1[,metricSubset], baseData1[, featureSubset])
 base.data2 <- data.frame(baseData2[,metricSubset], baseData2[, featureSubset])
-
+```
+```{r}
 diff.data <- rbind(diff.data1, diff.data1)
-shift.data <- rbind(shift.data1, shift.data2)
+shift.data <- na.omit(rbind(shift.data1, shift.data2))
 base.data <- rbind(base.data1, base.data2)
 ```
 ```{r split_data}
@@ -95,49 +97,111 @@ We compared our time series models against the basic feature set with no conside
 
 Our first time series model, which we will call time shifting, involves adding n columns to the data that contain each feature shifted n = 5 points in the past. The second time series model, which we willl call time difference, involves adding a column which takes the average differece between the current data point x and the past n = 20 data points.
 
+## Linear Regression
+```{r lin_eval_function}
+elin <- function(fit, tr, tst, prefix = ""){
+  pred <- predict(fit, tst)
+  eval.test <- evaluate_data_asFrame(tst, pred)
+  
+  pred <- predict(fit, tr)
+  eval.train <- evaluate_data_asFrame(tr, pred)
+  
+  evals <- rbind(eval.test, eval.train)
+  row.names(evals) <- c(paste(prefix, "Test"), paste(prefix, "Train"))
+  return(evals)
+}
+```
+```{r lin_models}
+subset <- diff.train[ ,!(colnames(diff.train) %in% c("Selected"))]
+lin.diff.fit <- lm(Priority ~ . - X, data = subset)
+subset <- shift.train[ ,!(colnames(shift.train) %in% c("Selected"))]
+lin.shift.fit <- lm(Priority ~ . - X, data = subset)
+subset <- base.train[ ,!(colnames(base.train) %in% c("Selected"))]
+lin.base.fit <- lm(Priority ~ . - X, data = subset)
+```
+```{r lin_evals}
+lin.eval <- rbind(elin(lin.base.fit, base.train, base.test, "Base"),
+                   elin(lin.shift.fit, shift.train, shift.test, "Shift"),
+                   elin(lin.diff.fit, diff.train, diff.test, "Difference"))
+kable(lin.eval, "html") %>% kable_styling(bootstrap_options = "condensed") %>% 
+  column_spec(5:6, bold = T) %>%
+  group_rows("Basic Data", 1, 2) %>%
+  group_rows("Time Shift Data", 3, 4) %>%
+  group_rows("Difference Data", 5, 6)
+```
+
+## Radial SVM
+```{r rsvm_eval_function}
+esvm <- function(fit, tr, tst, prefix = ""){
+  pred <- predict(fit, tst)
+  eval.test <- evaluate_data_asFrame(tst, pred)
+  
+  pred <- predict(fit, tr)
+  eval.train <- evaluate_data_asFrame(tr, pred)
+  
+  evals <- rbind(eval.test, eval.train)
+  row.names(evals) <- c(paste(prefix, "Test"), paste(prefix, "Train"))
+  return(evals)
+}
+```
+```{r rsvm_models}
+subset <- diff.train[ ,!(colnames(diff.train) %in% c("Selected"))]
+rsvm.diff.fit <- svm(Priority ~ . - X, data = subset, kernel = "radial")
+subset <- na.omit(shift.train[ ,!(colnames(shift.train) %in% c("Selected"))])
+rsvm.shift.fit <- svm(Priority ~ . - X, data = subset, kernel = "radial")
+subset <- base.train[ ,!(colnames(base.train) %in% c("Selected"))]
+rsvm.base.fit <- svm(Priority ~ . - X, data = subset, kernel = "radial")
+```
+```{r rsvm_evals}
+rsvm.eval <- rbind(esvm(rsvm.base.fit, base.train, base.test, "Base"),
+                   esvm(rsvm.shift.fit, shift.train, shift.test, "Shift"),
+                   esvm(rsvm.diff.fit, diff.train, diff.test, "Difference"))
+kable(rsvm.eval, "html") %>% kable_styling(bootstrap_options = "condensed") %>% 
+  column_spec(5:6, bold = T) %>%
+  group_rows("Basic Data", 1, 2) %>%
+  group_rows("Time Shift Data", 3, 4) %>%
+  group_rows("Difference Data", 5, 6)
+```
+
 ## Random Forests
-Using 5 splits (square root of number of features).
+```{r rf_hyperperams}
+depth = 5
+treeCount = 500
+```
+Using `r depth ` splits and `r treeCount ` trees.
+
 ```{r rf_eval_function}
-etrees <- function(fit, tr, tst, ttl, prefix = ""){
+etrees <- function(fit, tr, tst, prefix = ""){
   pred <- predict(fit, newdata = tst)
   eval.test <- evaluate_data_asFrame(tst, pred)
   
   pred <- predict(fit, newdata = tr)
   eval.train <- evaluate_data_asFrame(tr, pred)
-  
-  pred <- predict(fit, newdata = ttl)
-  eval.total <- evaluate_data_asFrame(ttl, pred)
-  evals <- rbind(eval.test, eval.train, eval.total)
-  row.names(evals) <- c(paste(prefix, "Test"), paste(prefix, "Train"), 
-                        paste(prefix, "Total"))
+  evals <- rbind(eval.test, eval.train)
+  row.names(evals) <- c(paste(prefix, "Test"), paste(prefix, "Train"))
   return(evals)
 }
 ```
 ```{r rf_models}
-depth = 5
-treeCount = 1000
-
 rf.diff.subset <- diff.train[ ,!(colnames(diff.train) %in% c("Selected"))]
 rf.diff.fit <- randomForest(Priority ~ . - X, data = rf.diff.subset, 
                        mtry = depth, importance = TRUE, ntree = treeCount)
-
-rf.shift.subset <- na.omit(shift.train[ ,!(colnames(shift.train) %in% c("Selected"))])
+rf.shift.subset <- shift.train[ ,!(colnames(shift.train) %in% c("Selected"))]
 rf.shift.fit <- randomForest(Priority ~ . - X, data = rf.shift.subset, 
                        mtry = depth, importance = TRUE, ntree = treeCount)
-
 rf.base.subset <- base.train[ ,!(colnames(base.train) %in% c("Selected"))]
 rf.base.fit <- randomForest(Priority ~ . - X, data = rf.base.subset, 
                        mtry = depth, importance = TRUE, ntree = treeCount)
 ```
 ```{r rf_evals}
-rf.eval <- rbind(etrees(rf.base.fit, base.test, base.train, base.total, "Difference"),
-                 etrees(rf.shift.fit, shift.test, shift.train, shift.total, "Shift"),
-                 etrees(rf.diff.fit, diff.train, diff.test, diff.total, "Base"))
-kable(rf.eval, "html") %>% kable_styling(bootstrap_options = "striped") %>% 
-  column_spec(c(1, 5:6), bold = T)%>%
-  group_rows("Basic Data", 1, 3) %>%
-  group_rows("Time Shift Data", 4, 6) %>%
-  group_rows("Difference Data", 7, 9)
+rf.eval <- rbind(etrees(rf.base.fit, base.train, base.test, "Base"),
+                 etrees(rf.shift.fit, shift.train, shift.test, "Shift"),
+                 etrees(rf.diff.fit, diff.train, diff.test, "Difference"))
+kable(rf.eval, "html") %>% kable_styling(bootstrap_options = "condensed") %>% 
+  column_spec(5:6, bold = T) %>%
+  group_rows("Basic Data", 1, 2) %>%
+  group_rows("Time Shift Data", 3, 4) %>%
+  group_rows("Difference Data", 5, 6)
 ```
 
 ## Validation
@@ -146,19 +210,13 @@ Since, during training, the version of each model using the time difference did 
 
 Also: Since Logistic Regression did so poorly, we've chosen to omit it here for brevity.
 
-```{r load_validationData}
-#val <- merge_sitl("mms_20151204.csv", "sitl_20151204.csv")
-#val$SelectedF <- as.factor(val$Selected)
-#validate <- data.frame(val[,metricSubset], series_metric(val[,featureSubset], 20))
-```
-
-### Random Forest
-
 ```{r}
 pred <- predict(rf.diff.fit, newdata = diff.validate)
 rf.diff.val <- evaluate_data_asFrame(diff.validate, pred)
+row.names(rf.diff.val) <- c("Validation")
 
-kable(rf.diff.val, "html") %>% kable_styling(bootstrap_options = "striped") %>% column_spec(4:5, bold = T)
+kable(rf.diff.val, "html") %>% kable_styling(bootstrap_options = "condensed") %>% 
+  column_spec(4:6, bold = T)
 ```
 
 # Recommendations
