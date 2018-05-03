@@ -1,5 +1,5 @@
 ---
-title: "CS 780 MMs Class Project"
+title: "CS 780 MMS Class Project"
 subtitle: "Preliminary Report"
 author: "Vega Group: Daroc Alden, Samantha Piatt, and Jeremy Walker"
 date: April 12, 2018
@@ -18,11 +18,11 @@ library(e1071)
 #library(ggplot)
 ```
 ```{r load_data}
-featureSubset <- c("DES_Density", "DES_Temperature_para", "DES_Temperature_perp", 
+featureSubset <- c("DES_Density", "DES_Temperature_para", "DES_Temperature_perp",
                    "DES_Velocity_x", "DES_Velocity_y", "DES_Velocity_z",
-                   #"DIS_Density", "DIS_Temperature_para", "DIS_Temperature_perp", 
+                   #"DIS_Density", "DIS_Temperature_para", "DIS_Temperature_perp",
                    #"DIS_Velocity_x", "DIS_Velocity_y", "DIS_Velocity_z",
-                   "FGM_Magnetic_Field_w", "FGM_Magnetic_Field_x", 
+                   "FGM_Magnetic_Field_w", "FGM_Magnetic_Field_x",
                    "FGM_Magnetic_Field_y", "FGM_Magnetic_Field_z")
 metricSubset <- c("X", "Selected", "Priority")
 
@@ -48,14 +48,14 @@ shift.data <- na.omit(rbind(shift.data1, shift.data2))
 base.data <- rbind(base.data1, base.data2)
 ```
 ```{r split_data}
-# split the data twice so that there is a training(76%), test(19%), 
+# split the data twice so that there is a training(76%), test(19%),
 # and validation(5%) set.
 diff.total <- split_train(diff.data, seed = 100, size = 0.95)
 diff.train <- split_train(diff.total, seed = 101, size = 0.8)
 diff.test <- split_test(diff.total, seed = 101, size = 0.8)
 diff.validate <- split_test(diff.data, seed = 100, size = 0.95)
 
-# Don't need a validation set with these, but we need them to be the same data 
+# Don't need a validation set with these, but we need them to be the same data
 # as the diff data for accurate comparison.
 shift.total <- split_train(shift.data, seed = 100, size = 0.95)
 shift.train <- split_train(shift.total, seed = 101, size = 0.8)
@@ -88,9 +88,7 @@ qqnorm(resid(m1))
 ```
 
 
-In fact the data is a time series. Therefore, we could not use the usual method of keeping some test data out to evaluate the performance of our model, because it would have left discontinuities in the data used for training our model.
-
-Therefore, we are using one of the two data sets as a validation set, while using the other data set in full to train our model. We hypothesise that adding time-delayed factors (i.e. factors which contain values from previous samples) will significantly improve the performance of many machine learning models on the validation set. See below for details.
+In fact the data is a time series. We hypothesise that adding time-delayed factors (i.e. factors which contain values from previous samples) will significantly improve the performance of many machine learning models on the validation set. See below for details.
 
 # Methods
 We compared our time series models against the basic feature set with no consideration for time, using multiple machine learning methods.
@@ -102,10 +100,10 @@ Our first time series model, which we will call time shifting, involves adding n
 elin <- function(fit, tr, tst, prefix = ""){
   pred <- predict(fit, tst)
   eval.test <- evaluate_data_asFrame(tst, pred)
-  
+
   pred <- predict(fit, tr)
   eval.train <- evaluate_data_asFrame(tr, pred)
-  
+
   evals <- rbind(eval.test, eval.train)
   row.names(evals) <- c(paste(prefix, "Test"), paste(prefix, "Train"))
   return(evals)
@@ -123,7 +121,7 @@ lin.base.fit <- lm(Priority ~ . - X, data = subset)
 lin.eval <- rbind(elin(lin.base.fit, base.train, base.test, "Base"),
                    elin(lin.shift.fit, shift.train, shift.test, "Shift"),
                    elin(lin.diff.fit, diff.train, diff.test, "Difference"))
-kable(lin.eval, "html") %>% kable_styling(bootstrap_options = "condensed") %>% 
+kable(lin.eval, "html") %>% kable_styling(bootstrap_options = "condensed") %>%
   column_spec(5:6, bold = T) %>%
   group_rows("Basic Data", 1, 2) %>%
   group_rows("Time Shift Data", 3, 4) %>%
@@ -135,10 +133,10 @@ kable(lin.eval, "html") %>% kable_styling(bootstrap_options = "condensed") %>%
 esvm <- function(fit, tr, tst, prefix = ""){
   pred <- predict(fit, tst)
   eval.test <- evaluate_data_asFrame(tst, pred)
-  
+
   pred <- predict(fit, tr)
   eval.train <- evaluate_data_asFrame(tr, pred)
-  
+
   evals <- rbind(eval.test, eval.train)
   row.names(evals) <- c(paste(prefix, "Test"), paste(prefix, "Train"))
   return(evals)
@@ -156,7 +154,7 @@ rsvm.base.fit <- svm(Priority ~ . - X, data = subset, kernel = "radial")
 rsvm.eval <- rbind(esvm(rsvm.base.fit, base.train, base.test, "Base"),
                    esvm(rsvm.shift.fit, shift.train, shift.test, "Shift"),
                    esvm(rsvm.diff.fit, diff.train, diff.test, "Difference"))
-kable(rsvm.eval, "html") %>% kable_styling(bootstrap_options = "condensed") %>% 
+kable(rsvm.eval, "html") %>% kable_styling(bootstrap_options = "condensed") %>%
   column_spec(5:6, bold = T) %>%
   group_rows("Basic Data", 1, 2) %>%
   group_rows("Time Shift Data", 3, 4) %>%
@@ -164,17 +162,12 @@ kable(rsvm.eval, "html") %>% kable_styling(bootstrap_options = "condensed") %>%
 ```
 
 ## Random Forests
-```{r rf_hyperperams}
-depth = 5
-treeCount = 500
-```
-Using `r depth ` splits and `r treeCount ` trees.
-
+Using 30 splits (chosen by cross validation).
 ```{r rf_eval_function}
 etrees <- function(fit, tr, tst, prefix = ""){
   pred <- predict(fit, newdata = tst)
   eval.test <- evaluate_data_asFrame(tst, pred)
-  
+
   pred <- predict(fit, newdata = tr)
   eval.train <- evaluate_data_asFrame(tr, pred)
   evals <- rbind(eval.test, eval.train)
@@ -183,21 +176,43 @@ etrees <- function(fit, tr, tst, prefix = ""){
 }
 ```
 ```{r rf_models}
+depth = 30
+treeCount = 1000
+```
+
+```{r}
+#ttt <- rf.diff.subset
+#ttt$Priority <- NULL
+#blah <- rfcv(ttt, rf.diff.subset$Priority, ntree = 10)
+```
+
+
+```{r rf_model}
 rf.diff.subset <- diff.train[ ,!(colnames(diff.train) %in% c("Selected"))]
-rf.diff.fit <- randomForest(Priority ~ . - X, data = rf.diff.subset, 
+#rf.shift.subset <- shift.train[ ,!(colnames(shift.train) %in% c("Selected"))]
+
+# Note: mtry was picked using Cross Validation, in the commented out block above.
+rf.diff.fit <- randomForest(Priority ~ . - X, data = rf.diff.subset,
                        mtry = depth, importance = TRUE, ntree = treeCount)
-rf.shift.subset <- shift.train[ ,!(colnames(shift.train) %in% c("Selected"))]
-rf.shift.fit <- randomForest(Priority ~ . - X, data = rf.shift.subset, 
+```
+```{r}
+pred <- predict(rf.diff.fit, newdata = diff.test)
+eval.test <- evaluate_data_asFrame(diff.test, pred)
+
+rf.shift.subset <- na.omit(shift.train[ ,!(colnames(shift.train) %in% c("Selected"))])
+rf.shift.fit <- randomForest(Priority ~ . - X, data = rf.shift.subset,
                        mtry = depth, importance = TRUE, ntree = treeCount)
+
+
 rf.base.subset <- base.train[ ,!(colnames(base.train) %in% c("Selected"))]
-rf.base.fit <- randomForest(Priority ~ . - X, data = rf.base.subset, 
+rf.base.fit <- randomForest(Priority ~ . - X, data = rf.base.subset,
                        mtry = depth, importance = TRUE, ntree = treeCount)
 ```
 ```{r rf_evals}
 rf.eval <- rbind(etrees(rf.base.fit, base.train, base.test, "Base"),
                  etrees(rf.shift.fit, shift.train, shift.test, "Shift"),
                  etrees(rf.diff.fit, diff.train, diff.test, "Difference"))
-kable(rf.eval, "html") %>% kable_styling(bootstrap_options = "condensed") %>% 
+kable(rf.eval, "html") %>% kable_styling(bootstrap_options = "condensed") %>%
   column_spec(5:6, bold = T) %>%
   group_rows("Basic Data", 1, 2) %>%
   group_rows("Time Shift Data", 3, 4) %>%
@@ -215,14 +230,13 @@ pred <- predict(rf.diff.fit, newdata = diff.validate)
 rf.diff.val <- evaluate_data_asFrame(diff.validate, pred)
 row.names(rf.diff.val) <- c("Validation")
 
-kable(rf.diff.val, "html") %>% kable_styling(bootstrap_options = "condensed") %>% 
+kable(rf.diff.val, "html") %>% kable_styling(bootstrap_options = "condensed") %>%
   column_spec(4:6, bold = T)
 ```
 
 # Recommendations
 
-Random Forests with Time Difference data did best on our validation set out of all tested methods. With a classification error of 12.73%, they are not as accurate as we might hope, but since we tested each of the methods on a validtation set which is similar to the set we will be tested on, we hope that it will have a similar classification error there.
-
+TODO
 
 # Analysis
 
