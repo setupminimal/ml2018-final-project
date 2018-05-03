@@ -154,34 +154,3 @@ split_test <- function(indata, size = 0.75, seed = 0){
   test <- indata[-points, ]
   return(test)
 }
-
-# -------------------------------------------------------------------- Factorize
-# Creates True/False factors for Binary or Priority data.
-#   Priority levels: High >= 75%, Medium >= 25%, Low < %10.
-#
-# Returns a data frame with High, Medium, and Low Priority columns
-#   containing true/false factors if Binary = FALSE,
-#   or a vector of true/false factors if Binary = TRUE.
-factorize <- function(column, binary = FALSE){
-  if(binary){
-    newc <- as.factor(ifelse(column == 1, TRUE, FALSE))
-    return(newc)
-  } else {
-    percentage <- function(x) (x - min(column)) / (max(column) - min(column))
-    ps <- percentage(column)
-    high <- as.factor(ifelse(ps >= 0.75, TRUE, FALSE))
-    medium <- as.factor(ifelse(ps >= 0.25, TRUE, FALSE))
-    low <- as.factor(ifelse(ps >= 0.1, TRUE, FALSE))
-    return(data.frame(High_Priority = high,
-                      Medium_Priority = medium,
-                      Low_Priority = low))
-  }
-}
-
-# -------------------------------------------------------------- Evaluate Models
-# Missclassification error.
-#   prediction and true value must be of the same data type;
-#   IE: (numeric, numeric) or (factor, factor)
-#
-# Returns a numeric value that corresponds to the classification error rate.
-class_error <- function(pred, tvalue) mean(pred != tvalue)
