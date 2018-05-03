@@ -81,7 +81,7 @@ Time Series Prediction Using Support Vector Machines: A Survey by Jicholas Sapaa
 We found that the data was not identically and independantly distributed, as demonstrated by the exemplary QQ plot below.
 
 ```{r qq_plot}
-m1 <- lm(Selected ~ FGM_Magnetic_Field_w + DES_Velocity_z, diff.data)
+m1 <- lm(Selected ~ FGM_Magnetic_Field_w + DES_Velocity_z, base.data)
 qqnorm(resid(m1))
 ```
 
@@ -94,7 +94,27 @@ We compared our time series models against the basic feature set with no conside
 Our first time series model, which we will call time shifting, involves adding n columns to the data that contain each feature shifted n = 5 points in the past. The second time series model, which we willl call time difference, involves adding a column which takes the average differece between the current data point x and the past n = 20 data points.
 
 ## Random Forests
-Using 4 splits (square root of number of features).
+Using 30 splits (chosen by cross validation).
+```{r rf_eval_function}
+etrees <- function(fit, tr, tst, ttl, prefix = ""){
+  pred <- predict(fit, newdata = tst)
+  eval.test <- evaluate_data_asFrame(tst, pred)
+  
+  pred <- predict(fit, newdata = tr)
+  eval.train <- evaluate_data_asFrame(tr, pred)
+  
+  pred <- predict(fit, newdata = ttl)
+  eval.total <- evaluate_data_asFrame(ttl, pred)
+  evals <- rbind(eval.test, eval.train, eval.total)
+  row.names(evals) <- c(paste(prefix, "Test"), paste(prefix, "Train"), 
+                        paste(prefix, "Total"))
+  return(evals)
+}
+```
+```{r rf_models}
+depth = 30
+treeCount = 1000
+```
 
 ```{r}
 #ttt <- rf.diff.subset
@@ -109,25 +129,30 @@ rf.diff.subset <- diff.train[ ,!(colnames(diff.train) %in% c("Selected"))]
 
 # Note: mtry was picked using Cross Validation, in the commented out block above.
 rf.diff.fit <- randomForest(Priority ~ . - X, data = rf.diff.subset, 
-                       mtry = 30, importance = TRUE, ntree = 100)
-#rf.shift.fit <- randomForest(Priority ~ . - X, data = rf.shift.subset, 
-#                       mtry = 5, importance = TRUE, ntree = 1000)
+                       mtry = depth, importance = TRUE, ntree = treeCount)
 ```
 ```{r}
 pred <- predict(rf.diff.fit, newdata = diff.test)
 eval.test <- evaluate_data_asFrame(diff.test, pred)
 
-pred <- predict(rf.diff.fit, newdata = diff.train)
-eval.train <- evaluate_data_asFrame(diff.train, pred)
+rf.shift.subset <- na.omit(shift.train[ ,!(colnames(shift.train) %in% c("Selected"))])
+rf.shift.fit <- randomForest(Priority ~ . - X, data = rf.shift.subset, 
+                       mtry = depth, importance = TRUE, ntree = treeCount)
 
-pred <- predict(rf.diff.fit, newdata = diff.total)
-eval.total <- evaluate_data_asFrame(diff.total, pred)
 
-rf.diff.eval <- rbind(eval.test, eval.train, eval.total)
-row.names(rf.diff.eval) <- c("Test", "Train", "Total")
-
-kable(rf.diff.eval, "latex") %>% kable_styling(bootstrap_options = "striped") %>% 
-  column_spec(c(1, 5:6), bold = T)
+rf.base.subset <- base.train[ ,!(colnames(base.train) %in% c("Selected"))]
+rf.base.fit <- randomForest(Priority ~ . - X, data = rf.base.subset, 
+                       mtry = depth, importance = TRUE, ntree = treeCount)
+```
+```{r rf_evals}
+rf.eval <- rbind(etrees(rf.base.fit, base.test, base.train, base.total, "Difference"),
+                 etrees(rf.shift.fit, shift.test, shift.train, shift.total, "Shift"),
+                 etrees(rf.diff.fit, diff.train, diff.test, diff.total, "Base"))
+kable(rf.eval, "html") %>% kable_styling(bootstrap_options = "striped") %>% 
+  column_spec(c(1, 5:6), bold = T)%>%
+  group_rows("Basic Data", 1, 3) %>%
+  group_rows("Time Shift Data", 4, 6) %>%
+  group_rows("Difference Data", 7, 9)
 ```
 
 ## Validation
