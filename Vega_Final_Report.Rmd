@@ -48,9 +48,11 @@ baseData1 <- merge_sitl("mms_20151016.csv", "sitl_20151016.csv")
 baseData2 <- merge_sitl("mms_20151204.csv", "sitl_20151204.csv")
 
 diff.data1 <- data.frame(baseData1[,metricSubset],
-                         series_metric(baseData1[,featureSubset], diffWindow))
+                         series_metric(baseData1[,featureSubset], diffWindow), 
+                         Time = baseData1$Time)
 diff.data2 <- data.frame(baseData2[,metricSubset],
-                         series_metric(baseData2[,featureSubset], diffWindow))
+                         series_metric(baseData2[,featureSubset], diffWindow), 
+                         Time = baseData2$Time)
 
 shift.data1 <- data.frame(baseData1[,metricSubset],
                           shiftData(baseData1[,featureSubset]))
@@ -72,7 +74,8 @@ base.data <- rbind(base.data1, base.data2)
 ```{r split_data}
 # split the data twice so that there is a training(72%), test(18%),
 # and validation(10%) set.
-diff.total <- split_train(diff.data, seed = 100, size = 0.9)
+diff.subset <- diff.data[ ,!(colnames(diff.data) %in% c("Time"))]
+diff.total <- split_train(diff.subset, seed = 100, size = 0.9)
 diff.train <- split_train(diff.total, seed = 101, size = 0.8)
 diff.test <- split_test(diff.total, seed = 101, size = 0.8)
 diff.validate <- split_test(diff.data, seed = 100, size = 0.9)
@@ -253,8 +256,8 @@ Because we compared our feature sets using multiple methods (using the the same 
 
 
 ```{r diff_rf_validation}
-pred <- predict(rf.fit, diff.validate)
-rf.diff.val <- evaluate_data_asFrame(diff.validate, pred)
+val.pred <- predict(rf.fit, diff.validate)
+rf.diff.val <- evaluate_data_asFrame(diff.validate, val.pred)
 row.names(rf.diff.val) <- c("Time Difference")
 
 kable(rf.diff.val, format = "latex", booktabs = T, 
@@ -264,8 +267,19 @@ kable(rf.diff.val, format = "latex", booktabs = T,
   column_spec(c(1, 4:5), bold = T, color = "#591d91")
 ```
 ```{r save_test_prediction}
-pred <- predict(rf.fit, test.data)
-save_predictions(pred, test.data$X, "mitl_20161022.csv")
+test.pred <- predict(rf.fit, test.data)
+save_predictions(test.pred, test.data$X, "mitl_20161022.csv")
+```
+
+Below is a plot showing the validation set with true SITL selection points in purple. Higher priority predictions tend to be the ones that were selected by the SITL in our validation set.
+
+```{r plot_validation, fig.asp = 0.25, fig.width = 10}
+ggplot(data.frame(Predicted.Priority = val.pred, Time = diff.validate$Time, 
+                  Selection = as.factor(ifelse(diff.validate$Selected == 1, "Selected", "Unselected"))), 
+       aes(y = Predicted.Priority, x = Time)) + theme_minimal() + 
+  scale_colour_manual(values = c(Selected = "#591d91", Unselected = "gray")) +
+  geom_point(aes(colour = Selection)) +  
+  labs(title = "Predicted vs SITL Selections")
 ```
 
 # Reccomendations
