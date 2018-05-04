@@ -1,38 +1,56 @@
 ---
 title: "CS 780 MMS Class Project"
-subtitle: "Preliminary Report"
+subtitle: "Final Project Report"
 author: "Vega Group: Daroc Alden, Samantha Piatt, and Jeremy Walker"
-date: April 12, 2018
+date: May 4, 2018
 output: pdf_document
 ---
 ```{r page_options, include = FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, fig.asp = 0.88, fig.width = 4, error = FALSE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, fig.asp = 0.88, fig.width = 3, 
+                      fig.align = "center", error = FALSE)
 
 source("GetDataFunctions.R")
 source("ExperimentalFunctions.R")
 
+# I'm sorry that there are all these packages but we all must sacrifice for beauty~
 library(knitr)
 library(kableExtra)
 library(randomForest)
 library(e1071)
-#library(ggplot)
+library(ggplot2)
+library(splines)
+library(cowplot)
+library(reshape)
 ```
-```{r load_data}
-featureSubset <- c("DES_Density", "DES_Temperature_para", "DES_Temperature_perp",
-                   "DES_Velocity_x", "DES_Velocity_y", "DES_Velocity_z",
-                   #"DIS_Density", "DIS_Temperature_para", "DIS_Temperature_perp",
-                   #"DIS_Velocity_x", "DIS_Velocity_y", "DIS_Velocity_z",
-                   "FGM_Magnetic_Field_w", "FGM_Magnetic_Field_x",
-                   "FGM_Magnetic_Field_y", "FGM_Magnetic_Field_z")
+```{r variables}
+DES_set <- c("DES_Density", "DES_Temperature_para", "DES_Temperature_perp", 
+             "DES_Velocity_x", "DES_Velocity_y", "DES_Velocity_z")
+DIS_set <- c("DIS_Density", "DIS_Temperature_para", "DIS_Temperature_perp", 
+             "DIS_Velocity_x", "DIS_Velocity_y", "DIS_Velocity_z")
+FGM_set <- c("FGM_Magnetic_Field_w", "FGM_Magnetic_Field_x", 
+             "FGM_Magnetic_Field_y", "FGM_Magnetic_Field_z")
+featureSubset <- c(DES_set, FGM_set)
 metricSubset <- c("X", "Selected", "Priority")
 
+# To reduce computation, I have chosen these low values for the hyperparameters:
+#   For the depth, although using 30 would be ideal, it takes longer and doesn't 
+#     give that much better performance than 15.
+#   For the tree count, because we run the fit method at least three times, 
+#     having a higher number of trees becomes excessive. With 50 trees, each 
+#     variable of the 30ish variables in the time difference data should be 
+#     represented/used more or less twice.
+diffWindow = 30
+depth = 15
+treeCount = 50
+```
+```{r load_data}
 baseData1 <- merge_sitl("mms_20151016.csv", "sitl_20151016.csv")
 baseData2 <- merge_sitl("mms_20151204.csv", "sitl_20151204.csv")
 
 diff.data1 <- data.frame(baseData1[,metricSubset],
-                         series_metric(baseData1[,featureSubset], 30))
+                         series_metric(baseData1[,featureSubset], diffWindow))
 diff.data2 <- data.frame(baseData2[,metricSubset],
-                         series_metric(baseData2[,featureSubset], 30))
+                         series_metric(baseData2[,featureSubset], diffWindow))
 
 shift.data1 <- data.frame(baseData1[,metricSubset],
                           shiftData(baseData1[,featureSubset]))
@@ -41,203 +59,221 @@ shift.data2 <- data.frame(baseData2[,metricSubset],
 
 base.data1 <- data.frame(baseData1[,metricSubset], baseData1[, featureSubset])
 base.data2 <- data.frame(baseData2[,metricSubset], baseData2[, featureSubset])
-```
-```{r}
+
+testData <- na.omit(read.csv("mms_20161022.csv"))
+testData <- testData[order(testData$Time),]
+test.data <- data.frame(baseData1[,metricSubset], 
+                        series_metric(baseData1[,featureSubset], diffWindow))
+
 diff.data <- rbind(diff.data1, diff.data1)
 shift.data <- na.omit(rbind(shift.data1, shift.data2))
 base.data <- rbind(base.data1, base.data2)
 ```
 ```{r split_data}
-# split the data twice so that there is a training(76%), test(19%),
-# and validation(5%) set.
-diff.total <- split_train(diff.data, seed = 100, size = 0.95)
+# split the data twice so that there is a training(72%), test(18%),
+# and validation(10%) set.
+diff.total <- split_train(diff.data, seed = 100, size = 0.9)
 diff.train <- split_train(diff.total, seed = 101, size = 0.8)
 diff.test <- split_test(diff.total, seed = 101, size = 0.8)
-diff.validate <- split_test(diff.data, seed = 100, size = 0.95)
+diff.validate <- split_test(diff.data, seed = 100, size = 0.9)
 
 # Don't need a validation set with these, but we need them to be the same data
 # as the diff data for accurate comparison.
-shift.total <- split_train(shift.data, seed = 100, size = 0.95)
+shift.total <- split_train(shift.data, seed = 100, size = 0.9)
 shift.train <- split_train(shift.total, seed = 101, size = 0.8)
 shift.test <- split_test(shift.total, seed = 101, size = 0.8)
 
-base.total <- split_train(base.data, seed = 100, size = 0.95)
+base.total <- split_train(base.data, seed = 100, size = 0.9)
 base.train <- split_train(base.total, seed = 101, size = 0.8)
 base.test <- split_test(base.total, seed = 101, size = 0.8)
+
+labels <- c("Basic Data", "Time Shift", "Time Difference")
 ```
 # Motivation
+This project is intended to explore opitons for automating a key part of the ongoing Magnetospheric Multiscale Mission - the selection of which detailed datapoints ought to be downloaded from the sattelite. This job is crrently done by a Scientist in the Loop (SITL), who must spend time each day evaluating the data observed by the satelite to decide how to spend bandwidth resources.
 
-This project is intended to explore opitons for automating a key part of the ongoing Magnetospheric Multiscale Mission - the selection of which detailed datapoints ought to be downloaded from the sattelite. This job is crrently done by a Scientist in the Loop, who must spend time each day evaluating the data observed by the satelite to decide how to spend bandwidth resources.
+Automating the selection of interesting data would free up valuable human time on the project. To do this, we have explored several methods for determining what data points might be interesting, as detailed below.
 
-Automating the selection of interesting data would free up valuable human time on the project. To do this, we have explored several methods for determining what data points might be interested, as detailed below.
+# Evaluation Criteria
+We are using the evaluation method outlined in [Project Evaluation: Leaderboard](https://gitlab.com/marekpetrik/ML-Spring2018/blob/master/project/evaluation.pdf). The method orders the predictions and then picks the top n elements where n = true number of sitl selections of the data set. Based on this, the number of found and missed selections are counted, and a weighted error is calculated (using the priority of the true SITL selections that were missed). The evaluation criteria also includes the overall classification error between the predicted selections and the true selections.
 
-# Related work
-Accuracy of Extrapolation (Time Series) Methods: Results of a Forecasting Competition by S. Makridakit et al. is a definitive comparison of different forecasting methods on different types of and horizons of data. While this is not a forecasting problem per se, the conclusion that they draw is likely appropriate to our problem because of the complex and varied nature of the S.I.T.Ls who decide what data ought to be acquired from the satelite: "[S]tatistically sophisticated methods do not do better than simple methods ... when there is considerable randomness in the data." (pg. 142 in the Journal of Forecasting, Vol 1, Iss. No. 2)
+For easier interpretation, we will list only the performance on the test data in this report.
 
-Rolling Window Selection for Out-of-Sample Forecasting with Time-Varying Parameters by Atsushi Inoue, Lu Jin, and Barbara Rossi reccomends limiting the size of the window of data used for forecasting so that regime changes in the input data don't disrupt the fit of one's model. Unfortunatly, this is not directly applicable to our project either, since we do not have access to all the data up to the present day, but instead only have selected samples.
-
-Time Series Prediction Using Support Vector Machines: A Survey by Jicholas Sapaankevych and Ravi Sankar points out that in the most common application for predicting time series data - the financial sector - a weighted variant of SVMs is often used called C-ascending SVMs, and that these have proven more adaptable, since they emphasize recent or current data over older data.
-
-# Evaluation criteria
-
+# Data Exploration
 We found that the data was not identically and independantly distributed, as demonstrated by the exemplary QQ plot below.
 
 ```{r qq_plot}
-m1 <- lm(Selected ~ FGM_Magnetic_Field_w + DES_Velocity_z, base.data)
-qqnorm(resid(m1))
+m1 <- lm(Priority ~ . - X - Selected, base.data)
+ggplot(data.frame(Residuals = resid(m1))) + theme_minimal() + 
+  stat_qq(aes(sample = Residuals), colour = "#591d91") + 
+  labs(title = "Residual QQ Plot")
 ```
 
+In fact, the data is a time series. We hypothesise that adding time-delayed factors (i.e. factors which contain values from previous samples) will significantly improve the performance of many machine learning models on the test and validation set.
 
-In fact the data is a time series. We hypothesise that adding time-delayed factors (i.e. factors which contain values from previous samples) will significantly improve the performance of many machine learning models on the validation set. See below for details.
+In addition, we saw that the DIS instrument data did not seem to impact the predictions, as shown on the plot below. Because of this, we did not include it in our models, which also helps to reduce possible overfitting and computation times.
+
+```{r plot_data, fig.width = 12, fig.asp = 0.75}
+DES <- melt(data.frame(scale(baseData1[, DES_set], center = TRUE, scale = TRUE), 
+                       Time = baseData1$Time), id = 'Time')
+DIS <- melt(data.frame(scale(baseData1[, DIS_set], center = TRUE, scale = TRUE), 
+                       Time = baseData1$Time), id = 'Time')
+FGM <- melt(data.frame(scale(baseData1[, FGM_set], center = TRUE, scale = TRUE), 
+                       Time = baseData1$Time), id = 'Time')
+SEL <- data.frame(X = baseData1$Time, Y = baseData1$Selected)
+free = 50
+
+remove_axis <- theme(axis.title.x=element_blank(), axis.text.x=element_blank(), 
+                     axis.line.x = element_blank())
+remove_legend <- theme(legend.position='none')
+p.theme <- (theme_minimal() + 
+          theme(legend.justification = "left", plot.margin = margin(0, 0, 0, 0)))
+
+spDES <- ggplot(DES, aes(x = Time, y = value, color = variable)) + p.theme +
+  geom_smooth(method = "lm", formula = y ~ ns(x, df = free), se = FALSE) + 
+  remove_axis + ylab("DES") + guides(color = guide_legend(title = "DES")) + 
+  labs(title = "Features Grouped by Instrument and Time (Scaled)")
+spDIS <- ggplot(DIS, aes(x = Time, y = value, color = variable)) + p.theme +
+  geom_smooth(method = "lm", formula = y ~ ns(x, df = free), se = FALSE) + 
+  remove_axis + ylab("DIS") + guides(color = guide_legend(title = "DIS")) + 
+  theme(plot.title = element_blank())
+spFGM <- ggplot(FGM, aes(x = Time, y = value, color = variable)) + p.theme +
+  geom_smooth(method = "lm", formula = y ~ ns(x, df = free), se = FALSE) + 
+  remove_axis + ylab("FGM") + guides(color = guide_legend(title = "FGM"))
+pSEL <- ggplot(SEL, aes(x = X, y = Y)) + p.theme + 
+  geom_line() + xlab("Time in Miliseconds") +
+  scale_y_discrete(name = "Selected", limits = c(0, 1))
+
+lDES <- get_legend(spDES)
+lDIS <- get_legend(spDIS)
+lFGM <- get_legend(spFGM)
+
+plot_grid(
+  plot_grid(spDES + remove_legend, spDIS + remove_legend, spFGM + remove_legend, 
+            pSEL, align = "hv", ncol = 1, rel_heights = c(1, 1, 1, 0.4)),
+  plot_grid(lDES, lDIS, lFGM, NULL, ncol = 1, rel_heights = c(1, 1, 1, 0.4)),
+  rel_widths = c(5, 1)
+)
+```
 
 # Methods
-We compared our time series models against the basic feature set with no consideration for time, using multiple machine learning methods.
+We compared our time series feature sets against the basic feature set using multiple methods. We chose to use the Priorities that the SITL used when selecting time points as our prediction taarget. Doing this, the resulting predictions will be that of a priority, and not a probability.
 
-Our first time series model, which we will call time shifting, involves adding n columns to the data that contain each feature shifted n = 5 points in the past. The second time series model, which we willl call time difference, involves adding a column which takes the average differece between the current data point x and the past n = 20 data points.
+Our first time series feature set, which we will call time shifting, involves adding n = 5 columns to the data that contain each feature shifted n points in the past. The second time series feature set, which we will call time difference, involves adding two columns which take the average differece between the current data point x and the past and future n = `r diffWindow ` data points.
 
-## Linear Regression
-```{r lin_eval_function}
-elin <- function(fit, tr, tst, prefix = ""){
-  pred <- predict(fit, tst)
-  eval.test <- evaluate_data_asFrame(tst, pred)
+When we used the random forest method, we used the default tree depth setting except for our time difference model. For this, we used cross validation to pick the tree depth of `r depth `. To save computation time, we only used `r treeCount ` trees in our random forest models.
 
-  pred <- predict(fit, tr)
-  eval.train <- evaluate_data_asFrame(tr, pred)
+```{r rf_cv_plot}
+subset <- diff.train[ ,!(colnames(diff.train) %in% c("Selected", "X"))]
+cv.subset <- subset
+cv.subset$Priority <- NULL
+rf.cv <- rfcv(cv.subset, subset$Priority, ntree = 20)
 
-  evals <- rbind(eval.test, eval.train)
-  row.names(evals) <- c(paste(prefix, "Test"), paste(prefix, "Train"))
-  return(evals)
-}
+ggplot(data.frame(Variables = rf.cv$n.var, Error = rf.cv$error.cv)) + 
+  theme_minimal() + 
+  geom_point(aes(x = Variables, y = Error), colour = "#591d91") +  
+  labs(title = "Cross Validation of Tree Depth")
 ```
+
+The table below shows the test performance results for Linear Regression, Radial SVM, and Random Forests using all feature sets.
+
+
 ```{r lin_models}
-subset <- diff.train[ ,!(colnames(diff.train) %in% c("Selected"))]
-lin.diff.fit <- lm(Priority ~ . - X, data = subset)
-subset <- shift.train[ ,!(colnames(shift.train) %in% c("Selected"))]
-lin.shift.fit <- lm(Priority ~ . - X, data = subset)
-subset <- base.train[ ,!(colnames(base.train) %in% c("Selected"))]
-lin.base.fit <- lm(Priority ~ . - X, data = subset)
-```
-```{r lin_evals}
-lin.eval <- rbind(elin(lin.base.fit, base.train, base.test, "Base"),
-                   elin(lin.shift.fit, shift.train, shift.test, "Shift"),
-                   elin(lin.diff.fit, diff.train, diff.test, "Difference"))
-kable(lin.eval, "html") %>% kable_styling(bootstrap_options = "condensed") %>%
-  column_spec(5:6, bold = T) %>%
-  group_rows("Basic Data", 1, 2) %>%
-  group_rows("Time Shift Data", 3, 4) %>%
-  group_rows("Difference Data", 5, 6)
-```
-
-## Radial SVM
-```{r rsvm_eval_function}
-esvm <- function(fit, tr, tst, prefix = ""){
-  pred <- predict(fit, tst)
-  eval.test <- evaluate_data_asFrame(tst, pred)
-
-  pred <- predict(fit, tr)
-  eval.train <- evaluate_data_asFrame(tr, pred)
-
-  evals <- rbind(eval.test, eval.train)
-  row.names(evals) <- c(paste(prefix, "Test"), paste(prefix, "Train"))
-  return(evals)
+elin <- function(test, train){
+  subset <- train[ ,!(colnames(train) %in% c("Selected"))]
+  fit <- lm(Priority ~ . - X, data = subset)
+  pred <- predict(fit, test)
+  eval <- evaluate_data_asFrame(test, pred)
+  return(eval)
 }
+
+lin.diff.eval <- elin(diff.test, diff.train)
+lin.shift.eval <- elin(shift.test, shift.train)
+lin.base.eval <- elin(base.test, base.train)
+
+lin.eval <- rbind(lin.base.eval, lin.shift.eval, lin.diff.eval)
+lin.eval <- cbind(Features = labels, lin.eval)
 ```
 ```{r rsvm_models}
-subset <- diff.train[ ,!(colnames(diff.train) %in% c("Selected"))]
-rsvm.diff.fit <- svm(Priority ~ . - X, data = subset, kernel = "radial")
-subset <- na.omit(shift.train[ ,!(colnames(shift.train) %in% c("Selected"))])
-rsvm.shift.fit <- svm(Priority ~ . - X, data = subset, kernel = "radial")
-subset <- base.train[ ,!(colnames(base.train) %in% c("Selected"))]
-rsvm.base.fit <- svm(Priority ~ . - X, data = subset, kernel = "radial")
-```
-```{r rsvm_evals}
-rsvm.eval <- rbind(esvm(rsvm.base.fit, base.train, base.test, "Base"),
-                   esvm(rsvm.shift.fit, shift.train, shift.test, "Shift"),
-                   esvm(rsvm.diff.fit, diff.train, diff.test, "Difference"))
-kable(rsvm.eval, "html") %>% kable_styling(bootstrap_options = "condensed") %>%
-  column_spec(5:6, bold = T) %>%
-  group_rows("Basic Data", 1, 2) %>%
-  group_rows("Time Shift Data", 3, 4) %>%
-  group_rows("Difference Data", 5, 6)
-```
-
-## Random Forests
-Using 30 splits (chosen by cross validation).
-```{r rf_eval_function}
-etrees <- function(fit, tr, tst, prefix = ""){
-  pred <- predict(fit, newdata = tst)
-  eval.test <- evaluate_data_asFrame(tst, pred)
-
-  pred <- predict(fit, newdata = tr)
-  eval.train <- evaluate_data_asFrame(tr, pred)
-  evals <- rbind(eval.test, eval.train)
-  row.names(evals) <- c(paste(prefix, "Test"), paste(prefix, "Train"))
-  return(evals)
+ersvm <- function(test, train){
+  subset <- train[ ,!(colnames(train) %in% c("Selected"))]
+  fit <- svm(Priority ~ . - X, data = subset, kernel = "radial")
+  pred <- predict(fit, test)
+  eval <- evaluate_data_asFrame(test, pred)
+  return(eval)
 }
+rsvm.diff.eval <- ersvm(diff.test, diff.train)
+rsvm.shift.eval <- ersvm(shift.test, shift.train)
+rsvm.base.eval <- ersvm(base.test, base.train)
+
+rsvm.eval <- rbind(rsvm.base.eval, rsvm.shift.eval, rsvm.diff.eval)
+rsvm.eval <- cbind(Features = labels, rsvm.eval)
 ```
 ```{r rf_models}
-depth = 30
-treeCount = 1000
+erf <- function(test, train){
+  # uses the default mtry value since the base data set does not have as 
+  # many features as the expanded time difference or time shift data sets
+  subset <- train[ ,!(colnames(train) %in% c("Selected"))]
+  fit <- randomForest(Priority ~ . - X, data = subset, ntree = treeCount)
+  pred <- predict(fit, test)
+  eval <- evaluate_data_asFrame(test, pred)
+  return(eval)
+}
+
+rf.base.eval <- erf(base.test, base.train)
+rf.shift.eval <- erf(shift.test, shift.train)
+
+# do this outside the function so that we can use the model again later
+subset <- diff.train[ ,!(colnames(diff.train) %in% c("Selected"))]
+rf.fit <- randomForest(Priority ~ . - X, data = subset, mtry = depth,  
+                    ntree = treeCount)
+pred <- predict(rf.fit, diff.test)
+rf.diff.eval <- evaluate_data_asFrame(diff.test, pred)
+
+rf.eval <- rbind(rf.base.eval, rf.shift.eval, rf.diff.eval)
+rf.eval <- cbind(Features = labels, rf.eval)
 ```
-
-```{r}
-#ttt <- rf.diff.subset
-#ttt$Priority <- NULL
-#blah <- rfcv(ttt, rf.diff.subset$Priority, ntree = 10)
+```{r rsvm_evals}
+evals <- rbind(lin.eval, rsvm.eval, rf.eval)
+kable(evals, format = "latex", row.names = F, booktabs = T, 
+      col.names = c("", "Total", "Found", "Missed", 
+                    "Classification Error", "Weighted Error")) %>%
+  kable_styling(latex_options = c("striped", "condensed"), full_width = T) %>% 
+  column_spec(c(1, 4:5), bold = T, color = "#591d91") %>%
+  group_rows("Linear Regression", 1, 3) %>%
+  group_rows("Radial SVM", 4, 6) %>%
+  group_rows("Random Forest", 7, 9)
 ```
-
-
-```{r rf_model}
-rf.diff.subset <- diff.train[ ,!(colnames(diff.train) %in% c("Selected"))]
-#rf.shift.subset <- shift.train[ ,!(colnames(shift.train) %in% c("Selected"))]
-
-# Note: mtry was picked using Cross Validation, in the commented out block above.
-rf.diff.fit <- randomForest(Priority ~ . - X, data = rf.diff.subset,
-                       mtry = depth, importance = TRUE, ntree = treeCount)
-```
-```{r}
-pred <- predict(rf.diff.fit, newdata = diff.test)
-eval.test <- evaluate_data_asFrame(diff.test, pred)
-
-rf.shift.subset <- na.omit(shift.train[ ,!(colnames(shift.train) %in% c("Selected"))])
-rf.shift.fit <- randomForest(Priority ~ . - X, data = rf.shift.subset,
-                       mtry = depth, importance = TRUE, ntree = treeCount)
-
-
-rf.base.subset <- base.train[ ,!(colnames(base.train) %in% c("Selected"))]
-rf.base.fit <- randomForest(Priority ~ . - X, data = rf.base.subset,
-                       mtry = depth, importance = TRUE, ntree = treeCount)
-```
-```{r rf_evals}
-rf.eval <- rbind(etrees(rf.base.fit, base.train, base.test, "Base"),
-                 etrees(rf.shift.fit, shift.train, shift.test, "Shift"),
-                 etrees(rf.diff.fit, diff.train, diff.test, "Difference"))
-kable(rf.eval, "html") %>% kable_styling(bootstrap_options = "condensed") %>%
-  column_spec(5:6, bold = T) %>%
-  group_rows("Basic Data", 1, 2) %>%
-  group_rows("Time Shift Data", 3, 4) %>%
-  group_rows("Difference Data", 5, 6)
-```
-
-## Validation
-
-Since, during training, the version of each model using the time difference did significantly better for all models, we will compare those methods' performance on our validation set. Since none of the models perform exceptionally well here, it is likely that they have overfit. We suspect this may be an artifact of the different different SITLs on different weeks, or of our comparativly sparse training data. Regardless, the algorithm's performance on this validation set is a good indicator of its likely performance on the hidden test that you have for us, professor.
-
-Also: Since Logistic Regression did so poorly, we've chosen to omit it here for brevity.
-
-```{r}
-pred <- predict(rf.diff.fit, newdata = diff.validate)
-rf.diff.val <- evaluate_data_asFrame(diff.validate, pred)
-row.names(rf.diff.val) <- c("Validation")
-
-kable(rf.diff.val, "html") %>% kable_styling(bootstrap_options = "condensed") %>%
-  column_spec(4:6, bold = T)
-```
-
-# Recommendations
-
-TODO
 
 # Analysis
+The time difference feature set does significantly better than the others when using any of the three methods we tried (Linear Regression, Radial SVM,  or Random Forests).
 
-Since Random Forests did less well on our training data, but better on our validation set, it seems likely that other methods overfit. This can be solved in a few ways, not least of which will be to acquire more data. Overfitting is evidence that our methods are too flexible - so another way to reduce their flexibility would be to use bagging or boosting in combination with another method, or to use cross-validation to choose such parameters as the amount of time-shift to use.
+## Validation
+Because we compared our feature sets using multiple methods (using the the same test and training data), we held out a small validation set to reduce the chances of overfitting. Since the time difference features using random forests did the best, we will further evaluate it's performance on the validation set we withheld. This model performs well on our validation set, indicating that it should do fairly well on unseen data.
+
+
+```{r diff_rf_validation}
+pred <- predict(rf.fit, diff.validate)
+rf.diff.val <- evaluate_data_asFrame(diff.validate, pred)
+row.names(rf.diff.val) <- c("Time Difference")
+
+kable(rf.diff.val, format = "latex", booktabs = T, 
+      col.names = c("Total", "Found", "Missed", "Classification Error", 
+                    "Weighted Error")) %>% 
+  kable_styling(latex_options = c("striped", "condensed"), full_width = T) %>%
+  column_spec(c(1, 4:5), bold = T, color = "#591d91")
+```
+```{r save_test_prediction}
+pred <- predict(rf.fit, test.data)
+save_predictions(pred, test.data$X, "mitl_20161022.csv")
+```
+
+# Reccomendations
+It is likely that training our model on a wider variety of data, from different days, would give better prediction performance. Additionally, our model would benefit from cross validating the width of the average difference window. At the moment, we are picking a 'reasonable' static window size of 30, which may not be the optimum choice. The only hyperparameter we were able to tune is the tree depth. However, the number of trees used in the random forest model should also be tuned using cross validation for better prediction accuracy.
+
+# Related work
+- Accuracy of Extrapolation (Time Series) Methods: Results of a Forecasting Competition by S. Makridakit et al. is a definitive comparison of different forecasting methods on different types of and horizons of data. While this is not a forecasting problem per se, the conclusion that they draw is likely appropriate to our problem because of the complex and varied nature of the S.I.T.Ls who decide what data ought to be acquired from the satelite: "[S]tatistically sophisticated methods do not do better than simple methods ... when there is considerable randomness in the data." (pg. 142 in the Journal of Forecasting, Vol 1, Iss. No. 2)
+
+- Rolling Window Selection for Out-of-Sample Forecasting with Time-Varying Parameters by Atsushi Inoue, Lu Jin, and Barbara Rossi reccomends limiting the size of the window of data used for forecasting so that regime changes in the input data don't disrupt the fit of one's model. Unfortunatly, this is not directly applicable to our project either, since we do not have access to all the data up to the present day, but instead only have selected samples.
+
+- Time Series Prediction Using Support Vector Machines: A Survey by Jicholas Sapaankevych and Ravi Sankar points out that in the most common application for predicting time series data - the financial sector - a weighted variant of SVMs is often used called C-ascending SVMs, and that these have proven more adaptable, since they emphasize recent or current data over older data.

@@ -32,14 +32,14 @@ shiftData <- function (data) {
 #   the past and future n datapoints, given by the width parameter.
 #
 # Returns a data.frame containing each column of the original data frame, plus 
-#   one column for each with the suffix ".Past"
+#   one column for each with the suffix ".Past" and ".Future"
 series_metric <- function(data, width) {
   shift_metric <- function(column, width, prefix){
     n <- length(column)[1]
     tmp <- data.frame(past = 0, current = column, future = 0)
-    for(i in (width+1):(n-width)){
-      future = c()
-      past = c()
+    for(i in 1:n){
+      future = c(0)
+      past = c(0)
       for(j in 1:width){
         if((i - j) >= 1) past[j] <- column[i] - column[i-j]
         if((i + j) <= n) future[j] <- column[i] - column[i+j]

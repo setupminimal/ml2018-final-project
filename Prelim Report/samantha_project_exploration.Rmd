@@ -1,0 +1,119 @@
+---
+title: "MMS Project Pieces: Data Exploration and Visualization"
+author: "Samantha Piatt"
+date: April 4, 2018
+output: pdf_document
+---
+```{r page_options, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, fig.asp = 0.88, fig.width = 4, error = FALSE)
+
+source("GetDataFunctions.R")
+source("ExperimentalFunctions.R")
+
+#packnload(c("randomForest", "xgboost"))
+```
+```{r load_data}
+featureSubset <- c("DES_Density", "DES_Temperature_para", "DES_Temperature_perp", 
+                   "DES_Velocity_x", "DES_Velocity_y", "DES_Velocity_z",
+                   #"DIS_Density", "DIS_Temperature_para", "DIS_Temperature_perp", 
+                   #"DIS_Velocity_x", "DIS_Velocity_y", "DIS_Velocity_z",
+                   "FGM_Magnetic_Field_w", "FGM_Magnetic_Field_x", 
+                   "FGM_Magnetic_Field_y", "FGM_Magnetic_Field_z")
+metricSubset <- c("X", "Selected", "Priority")
+
+baseData1 <- merge_sitl("mms_20151016.csv", "sitl_20151016.csv")
+baseData1 <- data.frame(baseData1[,metricSubset], factorize(baseData1$Priority),
+                        series_metric(baseData1[,featureSubset], 20))
+baseData2 <- merge_sitl("mms_20151204.csv", "sitl_20151204.csv")
+baseData2 <- data.frame(baseData2[,metricSubset], factorize(baseData2$Priority),
+                        series_metric(baseData2[,featureSubset], 20))
+
+data <- rbind(baseData1, baseData2)
+```
+```{r split_data}
+# split the data twice so that there is a training(76%), test(19%), 
+# and validation(5%) set.
+split <- split_train(data, seed = 100, size = 0.95)
+train <- split_train(split, seed = 101, size = 0.8)
+test <- split_test(split, seed = 101, size = 0.8)
+validate <- split_test(data, seed = 100, size = 0.95)
+```
+```{r}
+head(test)
+```
+```{r functions}
+etrees <- function(fit, tr, tst, ttl){
+  bag.pred <- predict(fit, newdata = tst, type = 'prob')[,2]
+  eval.test <- evaluate_data_asFrame(tst, bag.pred)
+  
+  bag.pred <- predict(fit, newdata = tr, type = 'prob')[,2]
+  eval.train <- evaluate_data_asFrame(tr, bag.pred)
+  
+  bag.pred <- predict(fit, newdata = ttl, type = 'prob')[,2]
+  eval.total <- evaluate_data_asFrame(ttl, bag.pred)
+  return(rbind(eval.test, eval.train, eval.total))
+}
+weighted_predict <- function(highFit, selectedFit, dt){
+  p1 <- predict(highFit, newdata = dt, type = 'prob')[,2]
+  p2 <- predict(selectedFit, newdata = dt, type = 'prob')[,2]
+  return(c(p1 * p2))
+}
+print_eval <- function(eval, title){
+  cat(title, "\n--------------------------------------\n")
+  cat("Test set of", eval$Total.SITL[1], "SITL points - Found:", 
+      eval$Found.SITL[1], "Missed:", eval$Missed.SITL[1], "\n")
+  cat("Training set of", eval$Total.SITL[2], "SITL points - Found:", 
+      eval$Found.SITL[2], "Missed:", eval$Missed.SITL[2], "\n")
+  cat("Total set of", eval$Total.SITL[3], "SITL points - Found:",
+      eval$Found.SITL[3], "Missed:", eval$Missed.SITL[3], "\n")
+  cat("Classificaton Error - Test:", eval$Class.Error[1], 
+      "Training:", eval$Class.Error[2], "Total:", eval$Class.Error[3], "\n")
+}
+```
+```{r fit_tree}
+#basetrees <- function(fit) etrees(fit, train, test, split)
+subset.train <- train[ ,!(colnames(train) %in% c("Selected", "Low_Priority", "Priority"))]
+rf.fit.high <- randomForest::randomForest(High_Priority ~ . - X, data = subset.train, 
+                       mtry = sqrt(length(subset.train) - 1), importance = TRUE)
+
+subset.train <- train[ ,!(colnames(train) %in% c("Selected", "High_Priority", "Priority"))]
+rf.fit.low <- randomForest::randomForest(Low_Priority ~ . - X, data = subset.train, 
+                       mtry = sqrt(length(subset.train) - 1), importance = TRUE)
+```
+```{r predict_tree}
+print_eval(etrees(rf.fit.high, train, test, split), "High Priority")
+print_eval(etrees(rf.fit.low, train, test, split), "\nLow Priority")
+```
+```{r}
+pred.test <- weighted_predict(rf.fit.high, rf.fit.low, test)
+eval.test <- evaluate_data_asFrame(test, pred.test)
+
+pred.train <- weighted_predict(rf.fit.high, rf.fit.low, train)
+eval.train <- evaluate_data_asFrame(train, pred.train)
+
+pred.total <- weighted_predict(rf.fit.high, rf.fit.low, split)
+eval.total <- evaluate_data_asFrame(split, pred.total)
+
+rbind(eval.test, eval.train, eval.total)
+```
+
+
+```{r xbBoost_weighted}
+weights <- function(x) ((x + 0.01) / 200)
+xgb.train <- xgboost::xgb.DMatrix(data.matrix(train[,6:35]), 
+                         label = train[,2], weight = weights(train[,3]))
+xgb.test <- xgboost::xgb.DMatrix(data.matrix(test[,6:35]), 
+                         label = test[,2], weight = weights(test[,3]))
+
+xgb.fit <- xgboost::xgboost(data = xgb.train, max.depth = 5, nround = 10, 
+                       objective = "binary:logistic", early_stopping_rounds = 3)
+```
+```{r}
+xgb.pred <- predict(xgb.fit, xgb.test)
+
+mean(as.numeric(xgb.pred > 0.5) != test[,2])
+```
+
+
+
+
