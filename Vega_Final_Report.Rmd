@@ -278,7 +278,7 @@ ggplot(data.frame(Predicted.Priority = val.pred, Time = diff.validate$Time,
                   Selection = as.factor(ifelse(diff.validate$Selected == 1, "Selected", "Unselected"))), 
        aes(y = Predicted.Priority, x = Time)) + theme_minimal() + 
   scale_colour_manual(values = c(Selected = "#591d91", Unselected = "gray")) +
-  geom_point(aes(colour = Selection)) +  
+  geom_point(aes(colour = Selection), alpha = 0.5) +  
   labs(title = "Predicted vs SITL Selections")
 ```
 
